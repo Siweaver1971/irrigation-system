@@ -1,0 +1,565 @@
+# ============================================================
+#  3-ZONE AUTOMATIC IRRIGATION SYSTEM
+#  ESPHome Configuration — Rev 3.0
+# ============================================================
+#  Hardware:
+#    Controller  : ESP32 DevKit V1 30-pin (WROOM-32)
+#    Terminal    : ESP32 30-pin terminal adapter board
+#    Display     : 0.96" SSD1306 I2C OLED 128x64
+#    Pump        : Elyaspedy 2088-554-144 12V DC (GPIO 15)
+#    Solenoids   : 12V DC NC brass valves (GPIO 26/27/14)
+#  Moisture      : Zigbee sensors via Z2M → HA (not wired to ESP32)
+#
+#  CHANGE LOG:
+#    Rev 1.0 — Initial release
+#    Rev 2.0 — Added OLED display
+#    Rev 3.0 — Removed wired ADC moisture sensors (now Zigbee via Z2M)
+#              OLED now pulls moisture data from HA sensor states
+#              GPIO 34/35/32 now free for future use
+# ============================================================
+
+esphome:
+  name: irrigation-controller
+  friendly_name: Garden Irrigation Controller
+  comment: "3-zone irrigation — back garden + 2x front garden"
+  on_boot:
+    priority: -100
+    then:
+      - switch.turn_off: zone1_valve
+      - switch.turn_off: zone2_valve
+      - switch.turn_off: zone3_valve
+      - switch.turn_off: pump_relay
+      - logger.log: "Irrigation controller booted — all valves closed"
+      - component.update: oled_display
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# ============================================================
+#  LOGGING
+# ============================================================
+logger:
+  level: INFO
+
+# ============================================================
+#  HOME ASSISTANT API
+# ============================================================
+api:
+  encryption:
+    key: !secret api_encryption_key
+  services:
+    # Start a specific zone for a set duration
+    - service: start_zone
+      variables:
+        zone: int
+        duration_minutes: int
+      then:
+        - script.execute:
+            id: run_zone
+            zone: !lambda "return zone;"
+            duration_minutes: !lambda "return duration_minutes;"
+
+    # Emergency stop all zones
+    - service: stop_all
+      then:
+        - script.execute: emergency_stop
+
+    # Called by HA automations when Zigbee moisture is low
+    - service: moisture_trigger
+      variables:
+        zone: int
+      then:
+        - if:
+            condition:
+              lambda: "return id(active_zone) == 0;"
+            then:
+              - script.execute:
+                  id: run_zone
+                  zone: !lambda "return zone;"
+                  duration_minutes: 8
+            else:
+              - logger.log:
+                  format: "Moisture trigger zone %d ignored — zone %d active"
+                  args: ["zone", "id(active_zone)"]
+
+# ============================================================
+#  OTA UPDATES
+# ============================================================
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ============================================================
+#  WIFI
+# ============================================================
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.120
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  ap:
+    ssid: "Irrigation Fallback"
+    password: !secret ap_fallback_password
+
+captive_portal:
+
+# ============================================================
+#  WEB SERVER — local access without HA
+# ============================================================
+web_server:
+  port: 80
+  include_internal: false
+
+# ============================================================
+#  I2C — OLED display
+# ============================================================
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  id: bus_a
+
+# ============================================================
+#  FONTS
+# ============================================================
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 10
+  - file: "gfonts://Roboto"
+    id: font_medium
+    size: 12
+  - file: "gfonts://Roboto+Mono"
+    id: font_mono
+    size: 10
+
+# ============================================================
+#  OLED DISPLAY — SSD1306 128x64
+#  Moisture data pulled from HA via homeassistant sensors below
+# ============================================================
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C
+    id: oled_display
+    update_interval: 5s
+    lambda: |-
+      if (id(active_zone) != 0) {
+        // ── ACTIVE ZONE SCREEN ──────────────────────────────
+        it.fill(COLOR_OFF);
+
+        it.filled_rectangle(0, 0, 128, 14);
+        it.printf(64, 2, id(font_small), COLOR_ON, TextAlign::TOP_CENTER,
+          "WATERING ACTIVE");
+
+        it.printf(64, 18, id(font_medium), COLOR_ON, TextAlign::TOP_CENTER,
+          "%s", id(active_zone_name).state.c_str());
+
+        it.printf(0, 34, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+          "Pump: %s", id(pump_relay).state ? "ON" : "OFF");
+
+        // Show moisture for active zone (from HA sensors)
+        float moisture = 0;
+        if (id(active_zone) == 1) moisture = id(ha_moisture_z1).state;
+        if (id(active_zone) == 2) moisture = id(ha_moisture_z2).state;
+        if (id(active_zone) == 3) moisture = -1; // No sensor on zone 3
+
+        if (moisture >= 0) {
+          it.printf(0, 46, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "Moisture: %.0f%%", moisture);
+        } else {
+          it.printf(0, 46, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "Moisture: schedule");
+        }
+
+        // Animated dots
+        static int dot = 0;
+        dot = (dot + 1) % 4;
+        for (int i = 0; i < dot; i++) {
+          it.filled_circle(110 + (i * 6), 54, 2);
+        }
+
+      } else {
+        // ── STANDBY SCREEN — moisture overview ──────────────
+        it.fill(COLOR_OFF);
+
+        it.filled_rectangle(0, 0, 128, 13);
+        it.printf(64, 1, id(font_small), COLOR_ON, TextAlign::TOP_CENTER,
+          "IRRIGATION SYSTEM");
+
+        // Zone 1 — Zigbee sensor
+        it.printf(0, 16, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z1");
+        float z1 = id(ha_moisture_z1).state;
+        if (!is_nan(z1)) {
+          it.rectangle(18, 17, 90, 9);
+          it.filled_rectangle(18, 17, (int)(z1 * 0.9), 9);
+          it.printf(112, 16, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "%.0f%%", z1);
+        } else {
+          it.printf(18, 16, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "No sensor data");
+        }
+
+        // Zone 2 — Zigbee sensor
+        it.printf(0, 29, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z2");
+        float z2 = id(ha_moisture_z2).state;
+        if (!is_nan(z2)) {
+          it.rectangle(18, 30, 90, 9);
+          it.filled_rectangle(18, 30, (int)(z2 * 0.9), 9);
+          it.printf(112, 29, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "%.0f%%", z2);
+        } else {
+          it.printf(18, 29, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+            "No sensor data");
+        }
+
+        // Zone 3 — schedule only, no sensor
+        it.printf(0, 42, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z3");
+        it.printf(18, 42, id(font_small), COLOR_ON, TextAlign::TOP_LEFT,
+          "Schedule only");
+
+        // Status line
+        it.line(0, 54, 128, 54);
+        if (!id(wifi_connected).state) {
+          it.printf(64, 56, id(font_small), COLOR_ON, TextAlign::TOP_CENTER,
+            "WiFi connecting...");
+        } else {
+          it.printf(64, 56, id(font_small), COLOR_ON, TextAlign::TOP_CENTER,
+            "HA Connected");
+        }
+      }
+
+# ============================================================
+#  HOME ASSISTANT SENSORS
+#  These pull Zigbee moisture values from HA into ESPHome
+#  for display on the OLED.
+#  Update entity names to match your Z2M device names.
+# ============================================================
+sensor:
+  # Zone 1 Zigbee moisture — from Z2M via HA
+  - platform: homeassistant
+    id: ha_moisture_z1
+    entity_id: sensor.garden_moisture_z1_soil_moisture
+    name: "Z1 Moisture (from HA)"
+    internal: false
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+  # Zone 2 Zigbee moisture — from Z2M via HA
+  - platform: homeassistant
+    id: ha_moisture_z2
+    entity_id: sensor.garden_moisture_z2_soil_moisture
+    name: "Z2 Moisture (from HA)"
+    internal: false
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+  # WiFi signal
+  - platform: wifi_signal
+    name: "Irrigation Controller WiFi"
+    update_interval: 60s
+    icon: mdi:wifi
+
+  # Uptime
+  - platform: uptime
+    name: "Irrigation Controller Uptime"
+    update_interval: 60s
+
+# ============================================================
+#  TIME
+# ============================================================
+time:
+  - platform: homeassistant
+    id: ha_time
+  - platform: sntp
+    id: sntp_time
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+# ============================================================
+#  GLOBALS
+# ============================================================
+globals:
+  - id: active_zone
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+# ============================================================
+#  SUBSTITUTIONS
+# ============================================================
+substitutions:
+  pump_prime_delay: "2"
+  valve_close_delay: "3"
+
+# ============================================================
+#  GPIO OUTPUTS
+# ============================================================
+output:
+  - platform: gpio
+    id: relay_zone1
+    pin:
+      number: GPIO26
+      inverted: true
+
+  - platform: gpio
+    id: relay_zone2
+    pin:
+      number: GPIO27
+      inverted: true
+
+  - platform: gpio
+    id: relay_zone3
+    pin:
+      number: GPIO14
+      inverted: true
+
+  - platform: gpio
+    id: relay_pump
+    pin:
+      number: GPIO15
+      inverted: true
+
+# ============================================================
+#  SWITCHES
+# ============================================================
+switch:
+  - platform: output
+    id: zone1_valve
+    name: "Zone 1 Valve (Back Garden)"
+    output: relay_zone1
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 1 valve OPEN"
+        - component.update: oled_display
+    on_turn_off:
+      then:
+        - logger.log: "Zone 1 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: zone2_valve
+    name: "Zone 2 Valve (Front Garden A)"
+    output: relay_zone2
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 2 valve OPEN"
+        - component.update: oled_display
+    on_turn_off:
+      then:
+        - logger.log: "Zone 2 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: zone3_valve
+    name: "Zone 3 Valve (Front Garden B)"
+    output: relay_zone3
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 3 valve OPEN"
+        - component.update: oled_display
+    on_turn_off:
+      then:
+        - logger.log: "Zone 3 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: pump_relay
+    name: "Irrigation Pump"
+    output: relay_pump
+    restore_mode: ALWAYS_OFF
+    icon: mdi:pump
+    on_turn_on:
+      then:
+        - component.update: oled_display
+    on_turn_off:
+      then:
+        - component.update: oled_display
+
+# ============================================================
+#  BINARY SENSORS
+# ============================================================
+binary_sensor:
+  - platform: template
+    id: irrigation_active
+    name: "Irrigation Active"
+    icon: mdi:sprinkler
+    lambda: |-
+      return id(active_zone) != 0;
+
+  - platform: status
+    name: "Irrigation Controller Status"
+    id: wifi_connected
+
+# ============================================================
+#  TEXT SENSORS
+# ============================================================
+text_sensor:
+  - platform: template
+    id: active_zone_name
+    name: "Active Zone"
+    icon: mdi:map-marker
+    lambda: |-
+      switch(id(active_zone)) {
+        case 1: return {"Zone 1 Back Garden"};
+        case 2: return {"Zone 2 Front A"};
+        case 3: return {"Zone 3 Front B"};
+        default: return {"Idle"};
+      }
+    update_interval: 5s
+
+  - platform: wifi_info
+    ip_address:
+      name: "Irrigation IP Address"
+
+# ============================================================
+#  SCRIPTS
+# ============================================================
+script:
+  # ── Run a specific zone ───────────────────────────────────
+  - id: run_zone
+    mode: single
+    parameters:
+      zone: int
+      duration_minutes: int
+    then:
+      - if:
+          condition:
+            lambda: "return id(active_zone) != 0;"
+          then:
+            - logger.log:
+                format: "Zone %d requested but zone %d already active"
+                args: ["zone", "id(active_zone)"]
+          else:
+            - globals.set:
+                id: active_zone
+                value: !lambda "return zone;"
+            - component.update: oled_display
+            # Prime pump before opening valve
+            - switch.turn_on: pump_relay
+            - logger.log:
+                format: "Pump priming — zone %d"
+                args: ["zone"]
+            - delay: !lambda "return ${pump_prime_delay} * 1000;"
+            # Open correct valve
+            - if:
+                condition:
+                  lambda: "return zone == 1;"
+                then:
+                  - switch.turn_on: zone1_valve
+            - if:
+                condition:
+                  lambda: "return zone == 2;"
+                then:
+                  - switch.turn_on: zone2_valve
+            - if:
+                condition:
+                  lambda: "return zone == 3;"
+                then:
+                  - switch.turn_on: zone3_valve
+            - logger.log:
+                format: "Zone %d running — %d min"
+                args: ["zone", "duration_minutes"]
+            # Run for requested duration
+            - delay: !lambda "return duration_minutes * 60000;"
+            # Safe shutdown sequence
+            - script.execute:
+                id: close_zone
+                zone: !lambda "return zone;"
+
+  # ── Safe valve close + pump stop ─────────────────────────
+  - id: close_zone
+    parameters:
+      zone: int
+    then:
+      - if:
+          condition:
+            lambda: "return zone == 1;"
+          then:
+            - switch.turn_off: zone1_valve
+      - if:
+          condition:
+            lambda: "return zone == 2;"
+          then:
+            - switch.turn_off: zone2_valve
+      - if:
+          condition:
+            lambda: "return zone == 3;"
+          then:
+            - switch.turn_off: zone3_valve
+      # Wait for valve to fully close before stopping pump
+      - delay: !lambda "return ${valve_close_delay} * 1000;"
+      - switch.turn_off: pump_relay
+      - globals.set:
+          id: active_zone
+          value: "0"
+      - component.update: oled_display
+      - logger.log:
+          format: "Zone %d complete — pump off"
+          args: ["zone"]
+
+  # ── Emergency stop ────────────────────────────────────────
+  - id: emergency_stop
+    mode: restart
+    then:
+      - switch.turn_off: zone1_valve
+      - switch.turn_off: zone2_valve
+      - switch.turn_off: zone3_valve
+      - delay: 500ms
+      - switch.turn_off: pump_relay
+      - globals.set:
+          id: active_zone
+          value: "0"
+      - component.update: oled_display
+      - logger.log: "EMERGENCY STOP — all zones closed"
+      - homeassistant.event:
+          event: esphome.irrigation_emergency_stop
+          data: {}
+
+# ============================================================
+#  BUTTONS
+# ============================================================
+button:
+  - platform: restart
+    name: "Restart Irrigation Controller"
+    icon: mdi:restart
+
+  - platform: template
+    name: "Emergency Stop"
+    icon: mdi:stop-circle
+    on_press:
+      then:
+        - script.execute: emergency_stop
+
+# ============================================================
+#  GPIO PINS AVAILABLE FOR FUTURE USE
+#  GPIO 34 — ADC input (input only)
+#  GPIO 35 — ADC input (input only)
+#  GPIO 32 — ADC input/output
+#  GPIO 33 — ADC input/output
+#  GPIO 18 — SPI/general
+#  GPIO 19 — SPI/general
+# ============================================================
+
+# ============================================================
+#  secrets.yaml
+# ============================================================
+#
+#  wifi_ssid: "YourWiFiName"
+#  wifi_password: "YourWiFiPassword"
+#  ota_password: "choose-a-strong-password"
+#  api_encryption_key: "run: esphome generate-api-key"
+#  ap_fallback_password: "irrigation-fallback"
+#
+# ============================================================

@@ -1,0 +1,375 @@
+# ============================================================
+#  PART A — HELPERS
+#  Place in config/helpers.yaml or add via HA UI:
+#  Settings > Devices & Services > Helpers
+# ============================================================
+
+# --- INPUT BOOLEANS (on/off toggles) ---
+input_boolean:
+  irrigation_master_enabled:
+    name: "Irrigation Master Switch"
+    icon: mdi:water-pump
+
+  irrigation_schedule_enabled:
+    name: "Scheduled Watering"
+    icon: mdi:calendar-clock
+
+  irrigation_z1_enabled:
+    name: "Zone 1 Enabled"
+    icon: mdi:numeric-1-circle
+
+  irrigation_z2_enabled:
+    name: "Zone 2 Enabled"
+    icon: mdi:numeric-2-circle
+
+  irrigation_z3_enabled:
+    name: "Zone 3 Enabled"
+    icon: mdi:numeric-3-circle
+
+  irrigation_rain_block:
+    name: "Rain Block Active"
+    icon: mdi:weather-rainy
+
+  irrigation_frost_block:
+    name: "Frost Block Active"
+    icon: mdi:snowflake
+
+# --- INPUT NUMBERS (adjustable values) ---
+input_number:
+  moisture_threshold_z1:
+    name: "Zone 1 Water Below (%)"
+    min: 10
+    max: 60
+    step: 5
+    initial: 30
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+  moisture_threshold_z2:
+    name: "Zone 2 Water Below (%)"
+    min: 10
+    max: 60
+    step: 5
+    initial: 30
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+  moisture_threshold_z3:
+    name: "Zone 3 Water Below (%)"
+    min: 10
+    max: 60
+    step: 5
+    initial: 30
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+
+  zone1_duration:
+    name: "Zone 1 Duration (min)"
+    min: 2
+    max: 30
+    step: 1
+    initial: 8
+    unit_of_measurement: "min"
+    icon: mdi:timer
+
+  zone2_duration:
+    name: "Zone 2 Duration (min)"
+    min: 2
+    max: 30
+    step: 1
+    initial: 8
+    unit_of_measurement: "min"
+    icon: mdi:timer
+
+  zone3_duration:
+    name: "Zone 3 Duration (min)"
+    min: 2
+    max: 30
+    step: 1
+    initial: 8
+    unit_of_measurement: "min"
+    icon: mdi:timer
+
+# --- TEMPLATE SENSORS ---
+template:
+  - sensor:
+      - name: "Irrigation Rain Block"
+        unique_id: irrigation_rain_block_combined
+        state: >
+          {{ is_state('input_boolean.irrigation_rain_block', 'on') or
+             is_state('input_boolean.irrigation_frost_block', 'on') }}
+        icon: mdi:cloud-lock
+
+  - binary_sensor:
+      - name: "Irrigation Rain Block"
+        unique_id: irrigation_rain_block_bs
+        state: >
+          {{ is_state('input_boolean.irrigation_rain_block', 'on') or
+             is_state('input_boolean.irrigation_frost_block', 'on') }}
+        icon: >
+          {% if is_state('input_boolean.irrigation_frost_block', 'on') %}
+            mdi:snowflake-alert
+          {% elif is_state('input_boolean.irrigation_rain_block', 'on') %}
+            mdi:weather-rainy
+          {% else %}
+            mdi:check-circle
+          {% endif %}
+
+---
+# ============================================================
+#  PART B — LOVELACE DASHBOARD
+#  Add as a new Dashboard view in HA:
+#  Settings > Dashboards > Add Dashboard > From YAML
+#  OR paste into an existing view's raw YAML editor
+# ============================================================
+
+title: Garden Irrigation
+icon: mdi:sprinkler-variant
+path: irrigation
+theme: default
+
+cards:
+
+  # ---- HEADER STATUS BAR ----
+  - type: custom:mushroom-title-card
+    title: Garden Irrigation
+    subtitle: >
+      {% if is_state('binary_sensor.irrigation_active', 'on') %}
+        🟢 Active — {{ states('text_sensor.active_zone') }}
+      {% elif is_state('input_boolean.irrigation_rain_block', 'on') %}
+        🌧️ Paused — Rain Block
+      {% elif is_state('input_boolean.irrigation_frost_block', 'on') %}
+        ❄️ Paused — Frost Protection
+      {% elif is_state('input_boolean.irrigation_master_enabled', 'off') %}
+        ⏸️ System Disabled
+      {% else %}
+        💤 Standby
+      {% endif %}
+
+  # ---- SYSTEM CONTROLS ----
+  - type: entities
+    title: System Controls
+    icon: mdi:cog
+    show_header_toggle: false
+    entities:
+      - entity: input_boolean.irrigation_master_enabled
+        name: Master Enable
+      - entity: input_boolean.irrigation_schedule_enabled
+        name: Scheduled Watering (7am)
+      - type: divider
+      - entity: input_boolean.irrigation_rain_block
+        name: Rain Block
+        icon: mdi:weather-rainy
+      - entity: input_boolean.irrigation_frost_block
+        name: Frost Block
+        icon: mdi:snowflake
+      - type: divider
+      - entity: button.irrigation_controller_emergency_stop
+        name: "⛔ Emergency Stop All"
+
+  # ---- ZONE STATUS GRID ----
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      # Zone 1
+      - type: custom:mushroom-template-card
+        primary: Zone 1
+        secondary: Back Garden
+        icon: mdi:sprinkler
+        icon_color: >
+          {% if is_state('switch.zone_1_valve_back_garden', 'on') %}green
+          {% elif states('sensor.zone_1_soil_moisture') | float < 30 %}orange
+          {% else %}blue{% endif %}
+        badge_icon: >
+          {% if is_state('input_boolean.irrigation_z1_enabled', 'off') %}mdi:pause-circle
+          {% elif states('sensor.zone_1_soil_moisture') | float < 30 %}mdi:water-alert
+          {% else %}mdi:check-circle{% endif %}
+        badge_color: >
+          {% if is_state('input_boolean.irrigation_z1_enabled', 'off') %}grey
+          {% elif states('sensor.zone_1_soil_moisture') | float < 30 %}orange
+          {% else %}green{% endif %}
+        tap_action:
+          action: more-info
+        entity: switch.zone_1_valve_back_garden
+
+      # Zone 2
+      - type: custom:mushroom-template-card
+        primary: Zone 2
+        secondary: Front Garden A
+        icon: mdi:sprinkler
+        icon_color: >
+          {% if is_state('switch.zone_2_valve_front_garden_a', 'on') %}green
+          {% elif states('sensor.zone_2_soil_moisture') | float < 30 %}orange
+          {% else %}blue{% endif %}
+        badge_icon: >
+          {% if is_state('input_boolean.irrigation_z2_enabled', 'off') %}mdi:pause-circle
+          {% elif states('sensor.zone_2_soil_moisture') | float < 30 %}mdi:water-alert
+          {% else %}mdi:check-circle{% endif %}
+        badge_color: >
+          {% if is_state('input_boolean.irrigation_z2_enabled', 'off') %}grey
+          {% elif states('sensor.zone_2_soil_moisture') | float < 30 %}orange
+          {% else %}green{% endif %}
+        tap_action:
+          action: more-info
+        entity: switch.zone_2_valve_front_garden_a
+
+      # Zone 3
+      - type: custom:mushroom-template-card
+        primary: Zone 3
+        secondary: Front Garden B
+        icon: mdi:sprinkler
+        icon_color: >
+          {% if is_state('switch.zone_3_valve_front_garden_b', 'on') %}green
+          {% elif states('sensor.zone_3_soil_moisture') | float < 30 %}orange
+          {% else %}blue{% endif %}
+        badge_icon: >
+          {% if is_state('input_boolean.irrigation_z3_enabled', 'off') %}mdi:pause-circle
+          {% elif states('sensor.zone_3_soil_moisture') | float < 30 %}mdi:water-alert
+          {% else %}mdi:check-circle{% endif %}
+        badge_color: >
+          {% if is_state('input_boolean.irrigation_z3_enabled', 'off') %}grey
+          {% elif states('sensor.zone_3_soil_moisture') | float < 30 %}orange
+          {% else %}green{% endif %}
+        tap_action:
+          action: more-info
+        entity: switch.zone_3_valve_front_garden_b
+
+  # ---- MOISTURE GAUGES ----
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Soil Moisture Levels
+      show_states: true
+      colorize_states: true
+    chart_type: radialBar
+    apex_config:
+      plotOptions:
+        radialBar:
+          hollow:
+            size: 30%
+          dataLabels:
+            name:
+              fontSize: 11px
+            value:
+              fontSize: 14px
+              formatter: "function(val) { return val + '%' }"
+    series:
+      - entity: sensor.zone_1_soil_moisture
+        name: Zone 1
+        color: "#4CAF50"
+      - entity: sensor.zone_2_soil_moisture
+        name: Zone 2
+        color: "#2196F3"
+      - entity: sensor.zone_3_soil_moisture
+        name: Zone 3
+        color: "#FF9800"
+
+  # ---- MOISTURE HISTORY (24h) ----
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: 24h Moisture History
+    graph_span: 24h
+    series:
+      - entity: sensor.zone_1_soil_moisture
+        name: Zone 1 — Back Garden
+        color: "#4CAF50"
+        stroke_width: 2
+      - entity: sensor.zone_2_soil_moisture
+        name: Zone 2 — Front A
+        color: "#2196F3"
+        stroke_width: 2
+      - entity: sensor.zone_3_soil_moisture
+        name: Zone 3 — Front B
+        color: "#FF9800"
+        stroke_width: 2
+
+  # ---- ZONE SETTINGS ----
+  - type: entities
+    title: Zone Settings
+    icon: mdi:tune
+    show_header_toggle: false
+    entities:
+      - type: section
+        label: Zone Enable / Disable
+      - entity: input_boolean.irrigation_z1_enabled
+        name: Zone 1 Active
+      - entity: input_boolean.irrigation_z2_enabled
+        name: Zone 2 Active
+      - entity: input_boolean.irrigation_z3_enabled
+        name: Zone 3 Active
+      - type: section
+        label: Moisture Trigger Thresholds
+      - entity: input_number.moisture_threshold_z1
+        name: Zone 1 Trigger
+      - entity: input_number.moisture_threshold_z2
+        name: Zone 2 Trigger
+      - entity: input_number.moisture_threshold_z3
+        name: Zone 3 Trigger
+      - type: section
+        label: Watering Duration
+      - entity: input_number.zone1_duration
+        name: Zone 1 Duration
+      - entity: input_number.zone2_duration
+        name: Zone 2 Duration
+      - entity: input_number.zone3_duration
+        name: Zone 3 Duration
+
+  # ---- MANUAL ZONE TRIGGERS ----
+  - type: entities
+    title: Manual Control
+    icon: mdi:hand-back-right
+    show_header_toggle: false
+    entities:
+      - type: button
+        name: Water Zone 1 Now
+        icon: mdi:sprinkler
+        action_name: START
+        tap_action:
+          action: call-service
+          service: esphome.irrigation_controller_start_zone
+          service_data:
+            zone: 1
+            duration_minutes: 5
+      - type: button
+        name: Water Zone 2 Now
+        icon: mdi:sprinkler
+        action_name: START
+        tap_action:
+          action: call-service
+          service: esphome.irrigation_controller_start_zone
+          service_data:
+            zone: 2
+            duration_minutes: 5
+      - type: button
+        name: Water Zone 3 Now
+        icon: mdi:sprinkler
+        action_name: START
+        tap_action:
+          action: call-service
+          service: esphome.irrigation_controller_start_zone
+          service_data:
+            zone: 3
+            duration_minutes: 5
+
+  # ---- WEATHER & CONDITIONS ----
+  - type: weather-forecast
+    entity: weather.home
+    forecast_type: daily
+    show_forecast: true
+
+  # ---- SYSTEM HEALTH ----
+  - type: entities
+    title: System Health
+    icon: mdi:heart-pulse
+    show_header_toggle: false
+    entities:
+      - entity: binary_sensor.irrigation_controller_status
+        name: ESP32 Controller
+      - entity: sensor.irrigation_controller_wi_fi
+        name: WiFi Signal
+      - entity: sensor.irrigation_controller_uptime
+        name: Uptime
+      - entity: sensor.outdoor_temperature
+        name: Outdoor Temperature

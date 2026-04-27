@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP67 Enclosure Layout — To Scale</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #0f1521;
+    --border: #1e3a5f;
+    --green: #00ff88;
+    --blue: #00aaff;
+    --amber: #ffaa00;
+    --red: #ff4466;
+    --dim: #4a6080;
+    --text: #c8d8e8;
+    --white: #e8f4ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,170,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,170,255,0.02) 1px, transparent 1px);
+    background-size: 30px 30px;
+    pointer-events: none;
+  }
+
+  .wrapper { position: relative; max-width: 1300px; margin: 0 auto; }
+
+  header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(1rem, 2.5vw, 1.5rem);
+    font-weight: 900;
+    color: var(--white);
+    letter-spacing: 3px;
+  }
+
+  header h1 span { color: var(--green); }
+  header p { margin-top: 6px; font-size: 0.7rem; color: var(--dim); letter-spacing: 2px; }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+  .diagram-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .panel-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    color: var(--dim);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .side { display: flex; flex-direction: column; gap: 12px; }
+
+  .info-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+
+  .info-block h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--blue);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dim-table { width: 100%; border-collapse: collapse; font-size: 0.68rem; }
+  .dim-table td { padding: 4px 6px; border-bottom: 1px solid rgba(30,58,95,0.3); }
+  .dim-table td:first-child { color: var(--dim); }
+  .dim-table td:last-child { color: var(--amber); font-weight: bold; }
+  .dim-table tr:last-child td { border-bottom: none; }
+
+  .note { font-size: 0.67rem; color: var(--dim); line-height: 1.6; }
+  .note strong { color: var(--amber); }
+
+  .warn {
+    background: rgba(255,68,102,0.06);
+    border-left: 3px solid var(--red);
+    padding: 8px 10px;
+    font-size: 0.67rem;
+    color: #ccc;
+    border-radius: 0 4px 4px 0;
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+  .warn strong { color: var(--red); }
+
+  .tooltip {
+    position: fixed;
+    background: #0a1828;
+    border: 1px solid var(--green);
+    color: var(--text);
+    font-size: 0.67rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 100;
+    max-width: 240px;
+    line-height: 1.5;
+    display: none;
+  }
+  .tooltip strong { color: var(--green); display: block; margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <h1>IP67 Enclosure Layout — <span>To Scale</span></h1>
+    <p>JOINFWORLD 290×190×140MM — SCALE: 1mm = 2.5px — HOVER COMPONENTS FOR DETAILS</p>
+  </header>
+
+  <div class="main-grid">
+    <div class="diagram-panel">
+      <div class="panel-title">// Internal Panel — Top View (lid removed) — Accurate Component Sizes</div>
+
+      <!--
+        SCALE: 1mm = 2.5px
+        Enclosure internal panel usable area: ~250 × 155mm = 625 × 387px
+        
+        Component real sizes → scaled:
+        Mean Well PSU:     159×97mm  → 397×242px
+        GEYA 4-ch relay:   90×68mm   → 225×170px  (on DIN rail right side)
+        Terminal blocks:   60×50mm   → 150×125px  (on DIN rail, between PSU and relay)
+        DIN rail:          250×15mm  → 625×37px   (full width at top)
+        ESP32+adapter:     75×55mm   → 187×137px  (below PSU, left)
+        Buck converter:    45×22mm   → 112×55px   (below PSU, right of ESP32)
+        Flyback diodes:    30×20mm   → 75×50px
+      -->
+
+      <svg viewBox="0 0 700 460" xmlns="http://www.w3.org/2000/svg"
+           id="diagram" style="width:100%;height:auto;cursor:crosshair;">
+        <defs>
+          <pattern id="perf" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+            <circle cx="4" cy="4" r="1" fill="#1a2a3a"/>
+          </pattern>
+          <pattern id="hatch" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="6" x2="6" y2="0" stroke="#223344" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- ══ ENCLOSURE BODY ══════════════════════════════════════════════ -->
+        <rect x="5" y="5" width="690" height="450" rx="10"
+              fill="#0a1015" stroke="#2a4060" stroke-width="3"/>
+        <!-- Perforated panel area -->
+        <rect x="20" y="20" width="660" height="420" rx="6"
+              fill="url(#perf)" stroke="#1a3050" stroke-width="1"/>
+
+        <!-- Corner mounting screws -->
+        <circle cx="38" cy="38" r="7" fill="#1a2a3a" stroke="#2a4060" stroke-width="1.5"/>
+        <line x1="34" y1="38" x2="42" y2="38" stroke="#3a5070" stroke-width="1"/>
+        <line x1="38" y1="34" x2="38" y2="42" stroke="#3a5070" stroke-width="1"/>
+        <circle cx="662" cy="38" r="7" fill="#1a2a3a" stroke="#2a4060" stroke-width="1.5"/>
+        <line x1="658" y1="38" x2="666" y2="38" stroke="#3a5070" stroke-width="1"/>
+        <line x1="662" y1="34" x2="662" y2="42" stroke="#3a5070" stroke-width="1"/>
+        <circle cx="38" cy="432" r="7" fill="#1a2a3a" stroke="#2a4060" stroke-width="1.5"/>
+        <line x1="34" y1="432" x2="42" y2="432" stroke="#3a5070" stroke-width="1"/>
+        <line x1="38" y1="428" x2="38" y2="436" stroke="#3a5070" stroke-width="1"/>
+        <circle cx="662" cy="432" r="7" fill="#1a2a3a" stroke="#2a4060" stroke-width="1.5"/>
+        <line x1="658" y1="432" x2="666" y2="432" stroke="#3a5070" stroke-width="1"/>
+        <line x1="662" y1="428" x2="662" y2="436" stroke="#3a5070" stroke-width="1"/>
+
+        <!-- ══ DIN RAIL — full width ═══════════════════════════════════════ -->
+        <!-- 250mm × 15mm → 625 × 37px, positioned at top -->
+        <rect x="30" y="28" width="640" height="34" rx="3"
+              fill="#556677" stroke="#7799aa" stroke-width="1.5"/>
+        <rect x="30" y="35" width="640" height="20" rx="2" fill="#445566"/>
+        <!-- DIN rail slots -->
+        <rect x="50" y="37" width="18" height="16" rx="1" fill="#334455"/>
+        <rect x="100" y="37" width="18" height="16" rx="1" fill="#334455"/>
+        <rect x="580" y="37" width="18" height="16" rx="1" fill="#334455"/>
+        <rect x="630" y="37" width="18" height="16" rx="1" fill="#334455"/>
+        <text x="350" y="49" text-anchor="middle" fill="#aabbcc" font-size="9" letter-spacing="2">DIN RAIL — 250mm FULL WIDTH</text>
+
+        <!-- ══ MEAN WELL PSU — 159×97mm → 397×242px ══════════════════════ -->
+        <!-- Positioned left side, below DIN rail -->
+        <!-- Top edge at y=75 (after DIN rail), left at x=28 -->
+        <g class="comp"
+           data-name="Mean Well LRS-150-12 PSU"
+           data-dim="159 × 97 × 30mm"
+           data-info="LARGEST COMPONENT. Mounts via 4x M4 screws to panel — NOT DIN rail. Mains L/N/E terminals on LEFT end. DC +V/-V output terminals on RIGHT end (facing relay board). Mesh top for ventilation. Keep 20mm clearance around mesh for airflow."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <!-- Main body -->
+          <rect x="28" y="75" width="397" height="242" rx="4"
+                fill="#1a1200" stroke="#ffaa00" stroke-width="2.5"/>
+          <!-- Mesh top surface -->
+          <rect x="32" y="79" width="389" height="234" rx="3"
+                fill="url(#hatch)" stroke="none"/>
+          <!-- Label band -->
+          <rect x="28" y="75" width="397" height="28" rx="4"
+                fill="rgba(255,170,0,0.2)"/>
+          <text x="226" y="93" text-anchor="middle" fill="#ffcc44" font-size="11" font-weight="bold" letter-spacing="1">MEAN WELL LRS-150-12</text>
+          <!-- Dimension annotation -->
+          <text x="226" y="108" text-anchor="middle" fill="#806020" font-size="8">159 × 97mm — 12V 12.5A — 150W</text>
+          <text x="226" y="122" text-anchor="middle" fill="#604010" font-size="8">Screw mount — NOT DIN rail</text>
+          <!-- Mains terminals left end -->
+          <rect x="28" y="130" width="22" height="60" rx="2"
+                fill="#2a0000" stroke="#ff4466" stroke-width="1.5"/>
+          <text x="39" y="152" text-anchor="middle" fill="#ff4466" font-size="7" font-weight="bold">L</text>
+          <text x="39" y="165" text-anchor="middle" fill="#ff4466" font-size="7" font-weight="bold">N</text>
+          <text x="39" y="178" text-anchor="middle" fill="#ffaa00" font-size="7" font-weight="bold">E</text>
+          <text x="39" y="200" text-anchor="middle" fill="#602020" font-size="6">240V</text>
+          <!-- DC output terminals right end -->
+          <rect x="378" y="130" width="47" height="60" rx="2"
+                fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+          <text x="401" y="152" text-anchor="middle" fill="#00ff88" font-size="7" font-weight="bold">+12V</text>
+          <text x="401" y="168" text-anchor="middle" fill="#ff4466" font-size="7" font-weight="bold">GND</text>
+          <text x="401" y="190" text-anchor="middle" fill="#3a7050" font-size="6">output</text>
+          <!-- Mounting screw holes -->
+          <circle cx="45" cy="90" r="4" fill="#0a1015" stroke="#ffaa00" stroke-width="1"/>
+          <circle cx="410" cy="90" r="4" fill="#0a1015" stroke="#ffaa00" stroke-width="1"/>
+          <circle cx="45" cy="305" r="4" fill="#0a1015" stroke="#ffaa00" stroke-width="1"/>
+          <circle cx="410" cy="305" r="4" fill="#0a1015" stroke="#ffaa00" stroke-width="1"/>
+          <!-- Voltage adjust pot -->
+          <circle cx="300" cy="280" r="12" fill="#223322" stroke="#00ff88" stroke-width="1"/>
+          <text x="300" y="284" text-anchor="middle" fill="#3a7050" font-size="7">SVR</text>
+          <!-- LED indicator -->
+          <circle cx="260" cy="280" r="5" fill="#00ff00" opacity="0.7"/>
+          <text x="260" y="298" text-anchor="middle" fill="#3a7050" font-size="6">PWR</text>
+          <!-- Size indicator lines -->
+          <line x1="28" y1="340" x2="425" y2="340" stroke="#ffaa00" stroke-width="0.5" stroke-dasharray="3,2"/>
+          <line x1="28" y1="336" x2="28" y2="344" stroke="#ffaa00" stroke-width="1"/>
+          <line x1="425" y1="336" x2="425" y2="344" stroke="#ffaa00" stroke-width="1"/>
+          <text x="226" y="356" text-anchor="middle" fill="#806020" font-size="8">← 159mm →</text>
+          <line x1="440" y1="75" x2="440" y2="317" stroke="#ffaa00" stroke-width="0.5" stroke-dasharray="3,2"/>
+          <line x1="436" y1="75" x2="444" y2="75" stroke="#ffaa00" stroke-width="1"/>
+          <line x1="436" y1="317" x2="444" y2="317" stroke="#ffaa00" stroke-width="1"/>
+          <text x="456" y="200" text-anchor="middle" fill="#806020" font-size="8"
+                transform="rotate(90,456,200)">97mm</text>
+        </g>
+
+        <!-- ══ ZONE DIVIDER LINE ══════════════════════════════════════════ -->
+        <line x1="455" y1="62" x2="455" y2="440" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="460" y="78" fill="#2a4060" font-size="7" letter-spacing="1">12V / SIGNAL ZONE →</text>
+        <text x="435" y="78" fill="#3a1010" font-size="7" letter-spacing="1" text-anchor="end">← ⚡ MAINS ZONE</text>
+
+        <!-- ══ TERMINAL BLOCKS — DIN rail, between PSU and relay ══════════ -->
+        <!-- 60×50mm → 150×125px, on DIN rail right of PSU -->
+        <g class="comp"
+           data-name="DIN Rail Terminal Blocks"
+           data-dim="~60mm wide on DIN rail"
+           data-info="Screw terminal blocks on DIN rail. Three groups: (1) Red — Mains L/N/E input from PSU left terminals, (2) Yellow — +12V distribution to relay COM and pump, (3) Blue/Black — GND common rail. Use yellow/green terminal for Earth."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <rect x="455" y="62" width="145" height="55" rx="3"
+                fill="#0a1015" stroke="#7799aa" stroke-width="1.5"/>
+          <text x="527" y="79" text-anchor="middle" fill="#aabbcc" font-size="8" font-weight="bold">TERMINAL BLOCKS</text>
+          <!-- Terminal groups -->
+          <rect x="460" y="83" width="40" height="28" rx="2" fill="#2a0000" stroke="#ff4466" stroke-width="1"/>
+          <text x="480" y="96" text-anchor="middle" fill="#ff4466" font-size="7">L N E</text>
+          <text x="480" y="106" text-anchor="middle" fill="#602020" font-size="6">mains</text>
+          <rect x="505" y="83" width="40" height="28" rx="2" fill="#1a1000" stroke="#ffaa00" stroke-width="1"/>
+          <text x="525" y="96" text-anchor="middle" fill="#ffaa00" font-size="7">+12V</text>
+          <text x="525" y="106" text-anchor="middle" fill="#604010" font-size="6">distrib</text>
+          <rect x="550" y="83" width="40" height="28" rx="2" fill="#001010" stroke="#4466ff" stroke-width="1"/>
+          <text x="570" y="96" text-anchor="middle" fill="#4466ff" font-size="7">GND</text>
+          <text x="570" y="106" text-anchor="middle" fill="#203060" font-size="6">common</text>
+          <!-- DIN clip -->
+          <rect x="460" y="113" width="135" height="5" rx="1" fill="#556677"/>
+        </g>
+
+        <!-- ══ GEYA 4-CH RELAY — 90×68mm → 225×170px ══════════════════════ -->
+        <!-- On DIN rail, right side of panel -->
+        <g class="comp"
+           data-name="GEYA FY-T734 4-Channel Relay"
+           data-dim="90 × 68mm on DIN rail"
+           data-info="Clips directly onto DIN rail. CH1=Zone1 (GPIO26), CH2=Zone2 (GPIO27), CH3=Zone3 (GPIO14), CH4=Pump (GPIO15). COM terminals → +12V from terminal block. NO terminals → solenoid/pump +ve. 1N5822 flyback diode across each NO/COM pair."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <rect x="610" y="62" width="72" height="160" rx="4"
+                fill="#1a1000" stroke="#ffaa00" stroke-width="2"/>
+          <rect x="610" y="62" width="72" height="22" rx="4"
+                fill="rgba(255,170,0,0.2)"/>
+          <text x="646" y="77" text-anchor="middle" fill="#ffcc44" font-size="8" font-weight="bold">GEYA</text>
+          <text x="646" y="88" text-anchor="middle" fill="#604010" font-size="7">4-CH RELAY</text>
+          <!-- 4 channel indicators -->
+          <rect x="615" y="95" width="62" height="28" rx="2" fill="#0a1000" stroke="#ffaa00" stroke-width="1"/>
+          <text x="646" y="108" text-anchor="middle" fill="#ffaa00" font-size="7" font-weight="bold">CH1</text>
+          <text x="646" y="119" text-anchor="middle" fill="#3a6020" font-size="6">Zone 1</text>
+          <rect x="615" y="127" width="62" height="28" rx="2" fill="#0a1000" stroke="#ffaa00" stroke-width="1"/>
+          <text x="646" y="140" text-anchor="middle" fill="#ffaa00" font-size="7" font-weight="bold">CH2</text>
+          <text x="646" y="151" text-anchor="middle" fill="#3a6020" font-size="6">Zone 2</text>
+          <rect x="615" y="159" width="62" height="28" rx="2" fill="#0a1000" stroke="#ffaa00" stroke-width="1"/>
+          <text x="646" y="172" text-anchor="middle" fill="#ffaa00" font-size="7" font-weight="bold">CH3</text>
+          <text x="646" y="183" text-anchor="middle" fill="#3a6020" font-size="6">Zone 3</text>
+          <rect x="615" y="191" width="62" height="28" rx="2" fill="#0a1000" stroke="#00aaff" stroke-width="1"/>
+          <text x="646" y="204" text-anchor="middle" fill="#00aaff" font-size="7" font-weight="bold">CH4</text>
+          <text x="646" y="215" text-anchor="middle" fill="#204060" font-size="6">Pump</text>
+          <!-- DIN clip -->
+          <rect x="615" y="220" width="62" height="5" rx="1" fill="#556677"/>
+          <!-- Size label -->
+          <text x="646" y="237" text-anchor="middle" fill="#4a6080" font-size="7">90×68mm</text>
+        </g>
+
+        <!-- ══ ESP32 + TERMINAL ADAPTER — 75×55mm → 187×137px ════════════ -->
+        <!-- Below PSU, left area — y starts at 320 (75+242+3) -->
+        <g class="comp"
+           data-name="ESP32 + Terminal Adapter"
+           data-dim="75 × 55mm on 10mm nylon standoffs"
+           data-info="Mount on 10mm M3 NYLON standoffs — 4 corners. Orient USB port toward RIGHT wall for access. GPIO 26/27/14/15 route LEFT toward relay board. ADC pins 32/34/35 route RIGHT toward sensor glands. OLED 4-wire I2C exits through right wall PG7 gland."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <rect x="28" y="330" width="187" height="105" rx="4"
+                fill="#0d1f0d" stroke="#00ff88" stroke-width="2"/>
+          <rect x="28" y="330" width="187" height="20" rx="4"
+                fill="rgba(0,255,136,0.15)"/>
+          <text x="121" y="344" text-anchor="middle" fill="#00ff88" font-size="9" font-weight="bold">ESP32 + TERMINAL ADAPTER</text>
+          <text x="121" y="358" text-anchor="middle" fill="#3a7050" font-size="7">75 × 55mm — M3 nylon standoffs</text>
+          <!-- GPIO labels -->
+          <text x="35" y="373" fill="#4a9070" font-size="6.5">GPIO26 → Z1</text>
+          <text x="35" y="384" fill="#4a9070" font-size="6.5">GPIO27 → Z2</text>
+          <text x="35" y="395" fill="#4a9070" font-size="6.5">GPIO14 → Z3</text>
+          <text x="35" y="406" fill="#00aaff" font-size="6.5">GPIO15 → Pump</text>
+          <!-- Right side labels -->
+          <text x="210" y="373" fill="#ffaa00" font-size="6.5" text-anchor="end">GPIO34 ADC →</text>
+          <text x="210" y="384" fill="#ffaa00" font-size="6.5" text-anchor="end">GPIO35 ADC →</text>
+          <text x="210" y="395" fill="#ffaa00" font-size="6.5" text-anchor="end">GPIO32 level →</text>
+          <text x="210" y="406" fill="#00ff88" font-size="6.5" text-anchor="end">GPIO21/22 OLED →</text>
+          <!-- Standoff corners -->
+          <circle cx="33" cy="335" r="4" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="210" cy="335" r="4" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="33" cy="430" r="4" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="210" cy="430" r="4" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <!-- USB port -->
+          <rect x="207" y="355" width="8" height="15" rx="1"
+                fill="#223344" stroke="#00aaff" stroke-width="1"/>
+          <text x="215" y="370" fill="#4a6080" font-size="5.5" text-anchor="start"> USB</text>
+        </g>
+
+        <!-- ══ BUCK CONVERTER — 45×22mm → 112×55px ════════════════════════ -->
+        <!-- To right of ESP32, below PSU output terminals -->
+        <g class="comp"
+           data-name="LM2596 Buck Converter"
+           data-dim="45 × 22mm on 10mm nylon standoffs"
+           data-info="CRITICAL: Set to 5.0V OUTPUT before connecting ESP32. IN+ from +12V terminal block. IN- to GND. OUT+ to ESP32 VIN. OUT- to GND. Adjust blue trimmer pot SLOWLY clockwise to increase voltage. Verify with multimeter before connecting ESP32."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <rect x="228" y="355" width="112" height="70" rx="4"
+                fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+          <rect x="228" y="355" width="112" height="18" rx="4"
+                fill="rgba(0,255,136,0.1)"/>
+          <text x="284" y="368" text-anchor="middle" fill="#00ff88" font-size="8" font-weight="bold">BUCK CONV.</text>
+          <text x="284" y="381" text-anchor="middle" fill="#3a7050" font-size="7">LM2596</text>
+          <text x="284" y="393" text-anchor="middle" fill="#3a7050" font-size="7">12V → 5V</text>
+          <text x="284" y="406" text-anchor="middle" fill="#2a5040" font-size="6.5">SET TO 5.0V FIRST</text>
+          <text x="284" y="418" text-anchor="middle" fill="#2a5040" font-size="6">M3 nylon standoffs</text>
+          <!-- Display -->
+          <rect x="234" y="381" width="22" height="10" rx="1" fill="#001000" stroke="#00aa00" stroke-width="0.5"/>
+          <text x="245" y="389" text-anchor="middle" fill="#00aa00" font-size="5">5.00</text>
+          <!-- Standoff corners -->
+          <circle cx="233" cy="360" r="3" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="335" cy="360" r="3" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="233" cy="420" r="3" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+          <circle cx="335" cy="420" r="3" fill="#2a4a2a" stroke="#00ff88" stroke-width="0.8"/>
+        </g>
+
+        <!-- ══ FLYBACK DIODES ════════════════════════════════════════════════ -->
+        <g class="comp"
+           data-name="Flyback Diodes 1N5822 × 4"
+           data-dim="Solder at relay terminals"
+           data-info="MANDATORY — DO NOT OMIT. Solder one 1N5822 diode across each relay NO/COM terminal pair. Cathode (silver band/stripe) toward the COM (+12V) terminal. Protects ESP32 GPIO pins from inductive voltage spikes when solenoids de-energise."
+           onmouseenter="tip(event)" onmouseleave="untip()">
+          <rect x="355" y="355" width="90" height="50" rx="4"
+                fill="#1a0000" stroke="#ff4466" stroke-width="1.5"/>
+          <text x="400" y="372" text-anchor="middle" fill="#ff4466" font-size="8" font-weight="bold">FLYBACK</text>
+          <text x="400" y="384" text-anchor="middle" fill="#602020" font-size="7">1N5822 × 4</text>
+          <text x="400" y="395" text-anchor="middle" fill="#602020" font-size="6.5">at relay terminals</text>
+        </g>
+
+        <!-- ══ CABLE GLANDS — LEFT WALL ══════════════════════════════════ -->
+        <text x="16" y="200" text-anchor="middle" fill="#4a6080" font-size="7"
+              transform="rotate(-90,16,200)">← MAINS + POWER CABLES</text>
+        <!-- Mains inlet -->
+        <circle cx="18" cy="150" r="8" fill="#1a0000" stroke="#ff4466" stroke-width="2"/>
+        <text x="18" y="154" text-anchor="middle" fill="#ff4466" font-size="7" font-weight="bold">AC</text>
+        <!-- Pump cable -->
+        <circle cx="18" cy="200" r="7" fill="#1a1000" stroke="#ffaa00" stroke-width="1.5"/>
+        <text x="18" y="204" text-anchor="middle" fill="#ffaa00" font-size="6">PMP</text>
+        <!-- Solenoid cables -->
+        <circle cx="18" cy="250" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="18" y="254" text-anchor="middle" fill="#00ff88" font-size="6">S1</text>
+        <circle cx="18" cy="290" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="18" y="294" text-anchor="middle" fill="#00ff88" font-size="6">S2</text>
+        <circle cx="18" cy="330" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="18" y="334" text-anchor="middle" fill="#00ff88" font-size="6">S3</text>
+
+        <!-- ══ CABLE GLANDS — RIGHT WALL ══════════════════════════════════ -->
+        <text x="684" y="330" text-anchor="middle" fill="#4a6080" font-size="7"
+              transform="rotate(90,684,330)">SENSOR / DISPLAY CABLES →</text>
+        <circle cx="682" cy="250" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="682" y="254" text-anchor="middle" fill="#3a7050" font-size="6">OL</text>
+        <circle cx="682" cy="285" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="682" y="289" text-anchor="middle" fill="#3a7050" font-size="6">WL</text>
+        <circle cx="682" cy="320" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="682" y="324" text-anchor="middle" fill="#3a7050" font-size="6">NX</text>
+        <circle cx="682" cy="355" r="7" fill="#001a00" stroke="#00ff88" stroke-width="1.5"/>
+        <text x="682" y="359" text-anchor="middle" fill="#3a7050" font-size="6">USB</text>
+
+        <!-- ══ WIRING ARROWS ════════════════════════════════════════════════ -->
+        <defs>
+          <marker id="am" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#ffaa00"/>
+          </marker>
+          <marker id="gm" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#00ff88"/>
+          </marker>
+          <marker id="rm" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#ff4466"/>
+          </marker>
+        </defs>
+        <!-- +12V from PSU right terminals to terminal block -->
+        <line x1="425" y1="165" x2="455" y2="165" stroke="#ffaa00" stroke-width="2"
+              marker-end="url(#am)"/>
+        <!-- +12V from terminal block to relay COM -->
+        <line x1="600" y1="100" x2="610" y2="100" stroke="#ffaa00" stroke-width="2"
+              marker-end="url(#am)"/>
+        <!-- Control signals from ESP32 to relay -->
+        <path d="M 215 385 L 450 385 L 450 150 L 610 150" stroke="#00ff88" stroke-width="1.5"
+              stroke-dasharray="5,3" fill="none" marker-end="url(#gm)"/>
+        <!-- 12V to buck converter -->
+        <line x1="500" y1="117" x2="500" y2="355" stroke="#ffaa00" stroke-width="1.5"
+              stroke-dasharray="4,3" marker-end="url(#am)"/>
+        <!-- 5V from buck to ESP32 -->
+        <line x1="284" y1="355" x2="180" y2="330" stroke="#ffaa00" stroke-width="1.5"
+              stroke-dasharray="3,2" marker-end="url(#am)"/>
+
+        <!-- ══ MAINS DANGER ZONE ════════════════════════════════════════════ -->
+        <rect x="22" y="65" width="165" height="290" rx="4"
+              fill="rgba(255,68,102,0.02)" stroke="rgba(255,68,102,0.2)"
+              stroke-width="0.8" stroke-dasharray="5,4"/>
+        <text x="109" y="370" text-anchor="middle"
+              fill="rgba(255,68,102,0.4)" font-size="7" letter-spacing="1">⚡ MAINS ZONE</text>
+        <text x="109" y="383" text-anchor="middle"
+              fill="rgba(255,68,102,0.25)" font-size="6">Qualified installer only</text>
+
+        <!-- ══ OLED (lid mounted) ══════════════════════════════════════════ -->
+        <rect x="458" y="250" width="60" height="35" rx="3"
+              fill="#000a00" stroke="#00ff88" stroke-width="1" stroke-dasharray="5,3"/>
+        <text x="488" y="265" text-anchor="middle" fill="#3a7050" font-size="7" font-weight="bold">OLED</text>
+        <text x="488" y="277" text-anchor="middle" fill="#2a5040" font-size="6">lid mount</text>
+        <text x="488" y="288" text-anchor="middle" fill="#2a5040" font-size="6">(cable thru gland)</text>
+
+        <!-- ══ FUTURE NEXTION ══════════════════════════════════════════════ -->
+        <rect x="458" y="295" width="140" height="55" rx="3"
+              fill="#0a0a1a" stroke="#2a2a5a" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="528" y="315" text-anchor="middle" fill="#3a3a60" font-size="8" font-weight="bold">NEXTION 3.5"</text>
+        <text x="528" y="328" text-anchor="middle" fill="#2a2a50" font-size="7">future — lid cutout</text>
+        <text x="528" y="340" text-anchor="middle" fill="#2a2a50" font-size="6">92×53mm aperture</text>
+
+        <!-- ══ SCALE INDICATOR ══════════════════════════════════════════════ -->
+        <rect x="28" y="440" width="250" height="12" rx="2" fill="#0a1015" stroke="#1e3a5f" stroke-width="0.5"/>
+        <line x1="30" y1="446" x2="280" y2="446" stroke="#4a6080" stroke-width="1"/>
+        <line x1="30" y1="442" x2="30" y2="450" stroke="#4a6080" stroke-width="1"/>
+        <line x1="155" y1="442" x2="155" y2="450" stroke="#4a6080" stroke-width="1"/>
+        <line x1="280" y1="442" x2="280" y2="450" stroke="#4a6080" stroke-width="1"/>
+        <text x="92" y="448" text-anchor="middle" fill="#4a6080" font-size="6">50mm</text>
+        <text x="217" y="448" text-anchor="middle" fill="#4a6080" font-size="6">50mm</text>
+
+        <!-- ══ LEGEND ══════════════════════════════════════════════════════ -->
+        <rect x="340" y="435" width="350" height="18" rx="2" fill="#0a1015" stroke="#1e3a5f" stroke-width="0.5"/>
+        <line x1="350" y1="444" x2="370" y2="444" stroke="#ffaa00" stroke-width="2"/>
+        <text x="375" y="447" fill="#806020" font-size="7">12V power</text>
+        <line x1="430" y1="444" x2="450" y2="444" stroke="#00ff88" stroke-width="1.5" stroke-dasharray="5,2"/>
+        <text x="455" y="447" fill="#3a7050" font-size="7">Control signal</text>
+        <line x1="535" y1="444" x2="555" y2="444" stroke="#ff4466" stroke-width="1.5" stroke-dasharray="3,2"/>
+        <text x="560" y="447" fill="#602020" font-size="7">Mains 240V</text>
+      </svg>
+    </div>
+
+    <!-- SIDE PANEL -->
+    <div class="side">
+      <div class="info-block">
+        <h3>// Real Component Dimensions</h3>
+        <table class="dim-table">
+          <tr><td>Mean Well PSU</td><td>159 × 97 × 30mm ⚠️</td></tr>
+          <tr><td>GEYA 4-ch relay</td><td>90 × 68mm (DIN)</td></tr>
+          <tr><td>Terminal blocks</td><td>~60mm on DIN rail</td></tr>
+          <tr><td>ESP32 + adapter</td><td>75 × 55mm</td></tr>
+          <tr><td>Buck converter</td><td>45 × 22mm</td></tr>
+          <tr><td>DIN rail</td><td>250mm full width</td></tr>
+          <tr><td>Enclosure panel</td><td>~250 × 155mm usable</td></tr>
+          <tr><td>PSU % of panel</td><td>63% width / 63% height</td></tr>
+        </table>
+        <div class="warn" style="margin-top:8px;">
+          <strong>⚠️ The PSU dominates the panel</strong><br>
+          At 159×97mm it occupies over half the usable area. The relay board, ESP32 and buck converter must fit in the remaining ~90mm to the right and ~55mm below.
+        </div>
+      </div>
+
+      <div class="info-block">
+        <h3>// Layout Strategy</h3>
+        <p class="note">
+          <strong>DIN rail (top):</strong> Terminal blocks on left third, GEYA relay on right third.<br><br>
+          <strong>PSU (left):</strong> Screw mounted directly to panel — 4x M4 screws through mounting feet. NOT on DIN rail.<br><br>
+          <strong>ESP32 (bottom left):</strong> Below PSU on nylon standoffs. Wire routes up-left to relay board.<br><br>
+          <strong>Buck converter (bottom centre):</strong> Between ESP32 and relay area on standoffs.<br><br>
+          <strong>Right wall glands:</strong> OLED, water level sensor, Nextion (future), USB access.<br><br>
+          <strong>Left wall glands:</strong> Mains inlet (PG11), pump cable (PG9), solenoids S1/S2/S3 (PG9).
+        </p>
+      </div>
+
+      <div class="info-block">
+        <h3>// Assembly Order</h3>
+        <p class="note">
+          <strong>1.</strong> Fit DIN rail and cable glands first<br>
+          <strong>2.</strong> Mount terminal blocks on DIN rail<br>
+          <strong>3.</strong> Clip GEYA relay onto DIN rail<br>
+          <strong>4.</strong> Drill 4x M4 holes for PSU feet — test fit before drilling<br>
+          <strong>5.</strong> Drill M3 standoff holes for ESP32 and buck<br>
+          <strong>6.</strong> Set buck converter to 5V BEFORE fitting ESP32<br>
+          <strong>7.</strong> Wire all 12V/signal connections<br>
+          <strong>8.</strong> Mains wiring last — qualified person only<br>
+          <strong>9.</strong> Power-on test before closing lid
+        </p>
+      </div>
+
+      <div class="info-block">
+        <h3>// PSU Mounting Note</h3>
+        <div class="warn">
+          <strong>Check PSU mounting hole positions</strong><br>
+          The LRS-150-12 has 4x M3 mounting holes on the base — measure their exact positions from your actual unit before drilling the panel. The datasheet shows them but manufacturing tolerances vary slightly. Mark and drill from the PSU itself.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tip"></div>
+
+<script>
+  const tip = document.getElementById('tip');
+
+  function tip_move(e) {
+    let x = e.clientX + 14, y = e.clientY + 14;
+    if (x + 260 > window.innerWidth) x = e.clientX - 260;
+    if (y + 140 > window.innerHeight) y = e.clientY - 140;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+
+  function tip(e) {
+    const n = e.currentTarget.dataset.name;
+    const d = e.currentTarget.dataset.dim;
+    const i = e.currentTarget.dataset.info;
+    tip.innerHTML = `<strong>${n}</strong><span style="color:#ffaa00;font-size:0.75em;display:block;margin-bottom:3px">${d}</span>${i}`;
+    tip.style.display = 'block';
+    tip_move(e);
+  }
+
+  function untip() { tip.style.display = 'none'; }
+
+  document.addEventListener('mousemove', e => {
+    if (tip.style.display === 'block') tip_move(e);
+  });
+
+  document.querySelectorAll('.comp').forEach(el => {
+    el.style.cursor = 'pointer';
+  });
+</script>
+</body>
+</html>

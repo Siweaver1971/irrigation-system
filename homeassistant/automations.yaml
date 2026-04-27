@@ -1,0 +1,454 @@
+# ============================================================
+#  HOME ASSISTANT — IRRIGATION AUTOMATIONS
+#  Rev 2.0 — Updated for Zigbee moisture sensors via Z2M
+# ============================================================
+#  Moisture sensing:
+#    Zone 1 (Back Garden)   : Zigbee sensor via Z2M
+#    Zone 2 (Front Borders) : Zigbee sensor via Z2M
+#    Zone 3 (Front Central) : Schedule only — no sensor
+#
+#  IMPORTANT — Entity names to update after pairing sensors:
+#    sensor.garden_moisture_z1_soil_moisture
+#    sensor.garden_moisture_z2_soil_moisture
+#  Change these to match your actual Z2M friendly names.
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. ZONE 1 — ZIGBEE MOISTURE TRIGGER (Back Garden)
+# ------------------------------------------------------------
+- id: irrigation_moisture_trigger_z1
+  alias: "Irrigation — Zone 1 Zigbee Moisture Trigger"
+  description: "Water back garden when Zigbee sensor reports dry soil"
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.garden_moisture_z1_soil_moisture
+      below: input_number.moisture_threshold_z1
+      for:
+        minutes: 15
+  condition:
+    - condition: and
+      conditions:
+        - condition: state
+          entity_id: input_boolean.irrigation_master_enabled
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.irrigation_z1_enabled
+          state: "on"
+        - condition: time
+          after: "06:00:00"
+          before: "10:00:00"
+        - condition: numeric_state
+          entity_id: sensor.outdoor_temperature
+          above: 3
+        - condition: state
+          entity_id: binary_sensor.irrigation_rain_block
+          state: "off"
+        - condition: state
+          entity_id: binary_sensor.irrigation_active
+          state: "off"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "🌱 Irrigation Starting"
+        message: >
+          Zone 1 (Back Garden) — soil at
+          {{ states('sensor.garden_moisture_z1_soil_moisture') | round(1) }}%
+        data:
+          tag: irrigation_z1
+    - service: esphome.irrigation_controller_start_zone
+      data:
+        zone: 1
+        duration_minutes: "{{ states('input_number.zone1_duration') | int }}"
+    - wait_template: "{{ is_state('binary_sensor.irrigation_active', 'off') }}"
+      timeout: "00:20:00"
+    - service: notify.mobile_app
+      data:
+        title: "✅ Zone 1 Complete"
+        message: >
+          Back garden watered. Soil now
+          {{ states('sensor.garden_moisture_z1_soil_moisture') | round(1) }}%
+
+# ------------------------------------------------------------
+# 2. ZONE 2 — ZIGBEE MOISTURE TRIGGER (Front Borders)
+# ------------------------------------------------------------
+- id: irrigation_moisture_trigger_z2
+  alias: "Irrigation — Zone 2 Zigbee Moisture Trigger"
+  description: "Water front borders when Zigbee sensor reports dry soil"
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.garden_moisture_z2_soil_moisture
+      below: input_number.moisture_threshold_z2
+      for:
+        minutes: 15
+  condition:
+    - condition: and
+      conditions:
+        - condition: state
+          entity_id: input_boolean.irrigation_master_enabled
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.irrigation_z2_enabled
+          state: "on"
+        - condition: time
+          after: "06:00:00"
+          before: "10:00:00"
+        - condition: numeric_state
+          entity_id: sensor.outdoor_temperature
+          above: 3
+        - condition: state
+          entity_id: binary_sensor.irrigation_rain_block
+          state: "off"
+        - condition: state
+          entity_id: binary_sensor.irrigation_active
+          state: "off"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "🌱 Irrigation Starting"
+        message: >
+          Zone 2 (Front Borders) — soil at
+          {{ states('sensor.garden_moisture_z2_soil_moisture') | round(1) }}%
+        data:
+          tag: irrigation_z2
+    - service: esphome.irrigation_controller_start_zone
+      data:
+        zone: 2
+        duration_minutes: "{{ states('input_number.zone2_duration') | int }}"
+    - wait_template: "{{ is_state('binary_sensor.irrigation_active', 'off') }}"
+      timeout: "00:20:00"
+    - service: notify.mobile_app
+      data:
+        title: "✅ Zone 2 Complete"
+        message: >
+          Front borders watered. Soil now
+          {{ states('sensor.garden_moisture_z2_soil_moisture') | round(1) }}%
+
+# ------------------------------------------------------------
+# 3. ZONE 3 — SCHEDULE ONLY (Front Central bed — no sensor)
+# ------------------------------------------------------------
+- id: irrigation_schedule_z3
+  alias: "Irrigation — Zone 3 Scheduled Watering"
+  description: "Water front central bed on schedule — no moisture sensor"
+  mode: single
+  trigger:
+    - platform: time
+      at: "07:00:00"
+  condition:
+    - condition: and
+      conditions:
+        - condition: state
+          entity_id: input_boolean.irrigation_master_enabled
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.irrigation_z3_enabled
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.irrigation_schedule_enabled
+          state: "on"
+        - condition: numeric_state
+          entity_id: sensor.outdoor_temperature
+          above: 3
+        - condition: state
+          entity_id: binary_sensor.irrigation_rain_block
+          state: "off"
+        - condition: state
+          entity_id: binary_sensor.irrigation_active
+          state: "off"
+  action:
+    - service: esphome.irrigation_controller_start_zone
+      data:
+        zone: 3
+        duration_minutes: "{{ states('input_number.zone3_duration') | int }}"
+    - wait_template: "{{ is_state('binary_sensor.irrigation_active', 'off') }}"
+      timeout: "00:20:00"
+    - service: notify.mobile_app
+      data:
+        title: "✅ Zone 3 Complete"
+        message: "Front central bed scheduled watering complete."
+
+# ------------------------------------------------------------
+# 4. MORNING BACKSTOP — check Z1 and Z2 at 7am if not
+#    already watered by moisture trigger overnight
+# ------------------------------------------------------------
+- id: irrigation_morning_backstop
+  alias: "Irrigation — Morning Backstop Check Z1 and Z2"
+  description: "7am fallback — water Z1/Z2 if still dry and not watered yet"
+  mode: single
+  trigger:
+    - platform: time
+      at: "07:15:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.irrigation_master_enabled
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.irrigation_schedule_enabled
+      state: "on"
+    - condition: numeric_state
+      entity_id: sensor.outdoor_temperature
+      above: 3
+    - condition: state
+      entity_id: binary_sensor.irrigation_rain_block
+      state: "off"
+  action:
+    # Zone 1 backstop
+    - if:
+        - condition: and
+          conditions:
+            - condition: numeric_state
+              entity_id: sensor.garden_moisture_z1_soil_moisture
+              below: input_number.moisture_threshold_z1
+            - condition: state
+              entity_id: input_boolean.irrigation_z1_enabled
+              state: "on"
+            - condition: state
+              entity_id: binary_sensor.irrigation_active
+              state: "off"
+      then:
+        - service: esphome.irrigation_controller_start_zone
+          data:
+            zone: 1
+            duration_minutes: "{{ states('input_number.zone1_duration') | int }}"
+        - wait_template: "{{ is_state('binary_sensor.irrigation_active', 'off') }}"
+          timeout: "00:20:00"
+        - delay: "00:01:00"
+    # Zone 2 backstop
+    - if:
+        - condition: and
+          conditions:
+            - condition: numeric_state
+              entity_id: sensor.garden_moisture_z2_soil_moisture
+              below: input_number.moisture_threshold_z2
+            - condition: state
+              entity_id: input_boolean.irrigation_z2_enabled
+              state: "on"
+            - condition: state
+              entity_id: binary_sensor.irrigation_active
+              state: "off"
+      then:
+        - service: esphome.irrigation_controller_start_zone
+          data:
+            zone: 2
+            duration_minutes: "{{ states('input_number.zone2_duration') | int }}"
+        - wait_template: "{{ is_state('binary_sensor.irrigation_active', 'off') }}"
+          timeout: "00:20:00"
+
+# ------------------------------------------------------------
+# 5. FROST EMERGENCY STOP
+# ------------------------------------------------------------
+- id: irrigation_frost_protection
+  alias: "Irrigation — Frost Protection Shutdown"
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.outdoor_temperature
+      below: 2
+  condition:
+    - condition: state
+      entity_id: binary_sensor.irrigation_active
+      state: "on"
+  action:
+    - service: button.press
+      target:
+        entity_id: button.irrigation_controller_emergency_stop
+    - service: notify.mobile_app
+      data:
+        title: "🌡️ Frost Alert — Irrigation Stopped"
+        message: >
+          Temperature {{ states('sensor.outdoor_temperature') }}°C.
+          All zones stopped automatically.
+        data:
+          tag: irrigation_frost
+          color: blue
+
+# ------------------------------------------------------------
+# 6. FROST FORECAST BLOCK
+# ------------------------------------------------------------
+- id: irrigation_frost_warning_block
+  alias: "Irrigation — Block if Frost Forecast"
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.forecast_overnight_low
+      below: 2
+  action:
+    - input_boolean.turn_on:
+        entity_id: input_boolean.irrigation_frost_block
+    - service: notify.mobile_app
+      data:
+        title: "❄️ Frost Forecast — Irrigation Paused"
+        message: >
+          Overnight low {{ states('sensor.forecast_overnight_low') }}°C forecast.
+          Irrigation paused until clear.
+
+- id: irrigation_frost_warning_clear
+  alias: "Irrigation — Clear Frost Block When Safe"
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.forecast_overnight_low
+      above: 3
+  action:
+    - input_boolean.turn_off:
+        entity_id: input_boolean.irrigation_frost_block
+    - service: notify.mobile_app
+      data:
+        title: "🌤️ Frost Risk Cleared"
+        message: "Irrigation re-enabled."
+
+# ------------------------------------------------------------
+# 7. RAIN DETECTION BLOCK
+# ------------------------------------------------------------
+- id: irrigation_rain_block_on
+  alias: "Irrigation — Block on Rain"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: weather.home
+      to:
+        - "rainy"
+        - "pouring"
+        - "snowy-rainy"
+    - platform: state
+      entity_id: binary_sensor.rain_sensor
+      to: "on"
+  action:
+    - input_boolean.turn_on:
+        entity_id: input_boolean.irrigation_rain_block
+    - if:
+        - condition: state
+          entity_id: binary_sensor.irrigation_active
+          state: "on"
+      then:
+        - service: button.press
+          target:
+            entity_id: button.irrigation_controller_emergency_stop
+        - service: notify.mobile_app
+          data:
+            title: "🌧️ Rain Detected — Irrigation Stopped"
+            message: "Active zone stopped. Paused for 24 hours."
+
+- id: irrigation_rain_block_off
+  alias: "Irrigation — Clear Rain Block After 24h"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: input_boolean.irrigation_rain_block
+      to: "on"
+      for:
+        hours: 24
+  condition:
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: weather.home
+          state: "rainy"
+        - condition: state
+          entity_id: weather.home
+          state: "pouring"
+  action:
+    - input_boolean.turn_off:
+        entity_id: input_boolean.irrigation_rain_block
+    - service: notify.mobile_app
+      data:
+        title: "🌤️ Rain Block Cleared"
+        message: "Irrigation re-enabled after 24h dry period."
+
+# ------------------------------------------------------------
+# 8. ZIGBEE SENSOR OFFLINE ALERT
+#    Warns if a Zigbee moisture sensor goes unavailable
+# ------------------------------------------------------------
+- id: irrigation_zigbee_sensor_z1_offline
+  alias: "Irrigation — Z1 Zigbee Sensor Offline"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: sensor.garden_moisture_z1_soil_moisture
+      to: "unavailable"
+      for:
+        minutes: 30
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "📡 Irrigation Sensor Offline"
+        message: "Zone 1 Zigbee moisture sensor unavailable for 30 minutes. Check battery and range."
+        data:
+          tag: irrigation_sensor_z1
+
+- id: irrigation_zigbee_sensor_z2_offline
+  alias: "Irrigation — Z2 Zigbee Sensor Offline"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: sensor.garden_moisture_z2_soil_moisture
+      to: "unavailable"
+      for:
+        minutes: 30
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "📡 Irrigation Sensor Offline"
+        message: "Zone 2 Zigbee moisture sensor unavailable for 30 minutes. Check battery and range."
+        data:
+          tag: irrigation_sensor_z2
+
+# ------------------------------------------------------------
+# 9. SAFETY WATCHDOG
+# ------------------------------------------------------------
+- id: irrigation_safety_timeout
+  alias: "Irrigation — Safety Timeout Watchdog"
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.irrigation_active
+      to: "on"
+      for:
+        minutes: 20
+  action:
+    - service: button.press
+      target:
+        entity_id: button.irrigation_controller_emergency_stop
+    - service: notify.mobile_app
+      data:
+        title: "⚠️ Irrigation Safety Stop"
+        message: "Zone ran over 20 minutes. Forced shutdown. Please check system."
+        data:
+          tag: irrigation_safety
+          importance: high
+
+# ------------------------------------------------------------
+# 10. CONTROLLER OFFLINE ALERT
+# ------------------------------------------------------------
+- id: irrigation_controller_offline
+  alias: "Irrigation — Controller Offline Alert"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.irrigation_controller_status
+      to: "off"
+      for:
+        minutes: 5
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "📡 Irrigation Controller Offline"
+        message: "ESP32 unreachable for 5 minutes. Check power and WiFi."
+        data:
+          tag: irrigation_offline
+          importance: high
+
+- id: irrigation_controller_back_online
+  alias: "Irrigation — Controller Back Online"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.irrigation_controller_status
+      to: "on"
+  action:
+    - service: notify.mobile_app
+      data:
+        title: "✅ Irrigation Controller Online"
+        message: "ESP32 controller reconnected."
+        data:
+          tag: irrigation_offline
