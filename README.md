@@ -2,7 +2,7 @@
 
 A fully automated DIY garden irrigation system built with ESPHome, Home Assistant, and a 3-zone solenoid valve manifold — fed from interconnected rainwater butts.
 
-![ESPHome](https://img.shields.io/badge/ESPHome-2026.4.2-blue)
+![ESPHome](https://img.shields.io/badge/ESPHome-2026.4.5-blue)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Compatible-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
@@ -13,14 +13,15 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 | Component | Specification |
 |-----------|--------------|
 | Controller | ESP32 DevKit V1 30-pin (ESPHome) |
-| Pump | 12V DC self-priming diaphragm pump (Shurflo-compatible) |
+| Pump | 12V DC self-priming diaphragm pump |
 | Valves | 12V DC NC brass solenoid valves × 3 (3/4" BSP) |
 | Moisture sensors | Zigbee via Zigbee2MQTT → Home Assistant (Zones 1 & 2) |
-| PSU | Mean Well LRS-150-12 (12V 12.5A DIN rail) |
-| Relay board | GEYA 4-channel DIN rail optoisolated relay |
+| PSU | Mean Well LRS-150-12 (12V 12.5A) |
+| Relay board | Keenso 4-channel 5V optoisolated (SRD-05VDC-SL-C) |
 | Buck converter | LM2596 12V → 5V for ESP32 |
 | Enclosure | IP67 290×190×140mm with DIN rail |
-| Display | 0.96" SSD1306 OLED (current) / Nextion 3.5" HMI (planned) |
+| Display (enclosure) | 0.96" SSD1306 OLED — I2C GPIO21/22 |
+| Display (remote) | Nextion NX4832F035 3.5" HMI — UART GPIO4/5 |
 | Filtration | 120-mesh inline sediment filter before pump |
 
 ---
@@ -42,7 +43,6 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 - 120-mesh inline sediment Y-filter before pump inlet
 - Self-priming diaphragm pump (auto pressure switch)
 - Non-return valve on pump outlet
-- All fed by gravity head + pump to achieve working pressure
 
 ---
 
@@ -50,15 +50,32 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 
 | GPIO | Direction | Function |
 |------|-----------|----------|
-| GPIO 26 | OUTPUT | Zone 1 relay (Back Garden) |
-| GPIO 27 | OUTPUT | Zone 2 relay (Front Borders) |
+| GPIO 4 | UART TX | Nextion 3.5" HMI display |
+| GPIO 5 | UART RX | Nextion 3.5" HMI display |
 | GPIO 14 | OUTPUT | Zone 3 relay (Front Central) |
 | GPIO 15 | OUTPUT | Pump relay |
 | GPIO 21 | I2C SDA | OLED display |
 | GPIO 22 | I2C SCL | OLED display |
-| GPIO 32 | INPUT ADC | Water level sensor (future) |
-| GPIO 16 | UART TX | Nextion display (future) |
-| GPIO 17 | UART RX | Nextion display (future) |
+| GPIO 26 | OUTPUT | Zone 1 relay (Back Garden) |
+| GPIO 27 | OUTPUT | Zone 2 relay (Front Borders) |
+
+---
+
+## 🖥️ Nextion HMI Display
+
+The NX4832F035 3.5" touchscreen is mounted in a remote IP67 display box connected via 4-core screened cable (up to 3m):
+
+| Core | Signal |
+|------|--------|
+| Red | 5V |
+| Black | GND |
+| Blue (RX) | ESP32 GPIO4 (TX) |
+| Yellow (TX) | ESP32 GPIO5 (RX) |
+
+**3 pages:**
+- **Page 0 — Status:** Active zone, pump state, system status, WiFi signal
+- **Page 1 — Moisture:** Zone 1 & 2 soil moisture % with live progress bars
+- **Page 2 — Settings:** Enable/disable zones, adjust thresholds and durations
 
 ---
 
@@ -67,10 +84,10 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 - **Pump prime sequence** — pump runs 2s before valve opens
 - **Valve close sequence** — valve closes 3s before pump stops
 - **Safety watchdog** — all zones stop after 20 minutes maximum
-- **Frost protection** — emergency stop below 2°C, forecast blocking below 2°C overnight
-- **Rain detection** — 24h block after rain detected via weather entity
-- **Flyback diodes** — 1N5822 across every solenoid coil (protects ESP32 GPIO)
-- **Optoisolated relays** — GEYA board isolates 12V load from ESP32 logic
+- **Frost protection** — emergency stop and forecast blocking
+- **Rain detection** — 24h irrigation block after rain detected
+- **Flyback protection** — Keenso relay board has built-in flyback diodes
+- **Optoisolated relays** — 5V relay board isolates 12V load from ESP32 logic
 - **Controller offline alert** — HA notification if ESP32 unreachable for 5 minutes
 
 ---
@@ -78,10 +95,11 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 ## 🏠 Home Assistant Integration
 
 - **ESPHome native API** — no MQTT required
-- **13 automations** — moisture triggers, scheduled watering, frost/rain protection, watchdog, offline alerts
-- **Lovelace dashboard** — Mushroom Cards + ApexCharts with garden background
+- **14 automations** — moisture triggers, scheduled watering, frost/rain protection, watchdog, offline alerts
+- **Lovelace dashboard** — Mushroom Cards + ApexCharts with garden background image
 - **Helpers** — 7 input_booleans, 6 input_numbers for runtime configuration
-- **Static IP** — 192.168.1.120
+- **Static IP** — 192.168.1.121
+- **Zigbee sensors** — `sensor.garden_moisture_sensor_back_soil_moisture` / `sensor.garden_moisture_sensor_front_soil_moisture`
 
 ### HACS Dependencies
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom)
@@ -95,31 +113,36 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 irrigation-system/
 ├── README.md
 ├── esphome/
-│   └── irrigation_esphome_v3.yaml    # ESP32 firmware configuration
+│   ├── irrigation_esphome_v3.yaml    # Previous version
+│   └── irrigation_esphome_v4.yaml    # Current — Nextion + GPIO4/5
 ├── homeassistant/
-│   ├── automations.yaml              # 13 HA automations
+│   ├── automations.yaml              # 14 HA automations
 │   └── helpers.yaml                  # Input booleans + input numbers
 └── docs/
     ├── enclosure_layout.html         # Interactive to-scale enclosure diagram
-    └── wiring_diagram.html           # Interactive wiring + flow diagram
+    ├── wiring_diagram.html           # Interactive wiring + flow diagram
+    └── nextion_hmi_design_guide.md   # Nextion 3-page HMI design reference
 ```
 
 ---
 
 ## 🔧 Build Notes
 
-### Enclosure Layout
-The Mean Well LRS-150-12 PSU is **159 × 97mm** and dominates the left side of the panel. It mounts via 4× M4 screws — **not** on the DIN rail. The GEYA relay board clips onto the DIN rail on the right side. ESP32 and buck converter mount on 10mm M3 nylon standoffs on the perforated base panel.
+### Relay Board
+The Keenso 4-channel 5V relay board (SRD-05VDC-SL-C) works directly with ESP32 3.3V GPIO — no transistor drivers needed. Set the jumper to **High trigger**. Built-in flyback diodes — no external diodes required.
+
+### PSU
+The Mean Well LRS-150-12 is **159 × 97mm** — mounts via 4× M4 screws, NOT on DIN rail.
+
+### Buck Converter
+**Set to exactly 5.0V BEFORE connecting the ESP32.** Verify with multimeter.
 
 ### Moisture Sensors
-Zones 1 and 2 use Zigbee capacitive soil moisture sensors via Zigbee2MQTT. After pairing, update these entity names in `automations.yaml`:
+Zigbee capacitive sensors paired via Zigbee2MQTT. Entity IDs:
 ```
-sensor.garden_moisture_z1_soil_moisture
-sensor.garden_moisture_z2_soil_moisture
+sensor.garden_moisture_sensor_back_soil_moisture   (Zone 1)
+sensor.garden_moisture_sensor_front_soil_moisture  (Zone 2)
 ```
-
-### Buck Converter Warning
-**Set the LM2596 to exactly 5.0V output BEFORE connecting the ESP32.** Use a multimeter on the output terminals and adjust the blue trimmer potentiometer. Wrong voltage will destroy the ESP32 instantly.
 
 ---
 
@@ -127,7 +150,7 @@ sensor.garden_moisture_z2_soil_moisture
 
 | Device | IP | Notes |
 |--------|----|-------|
-| ESP32 irrigation-controller | 192.168.1.120 | Static — set in YAML |
+| ESP32 irrigation-controller | 192.168.1.121 | Static |
 
 ---
 
