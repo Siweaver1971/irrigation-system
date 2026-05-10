@@ -1,0 +1,494 @@
+# ============================================================
+#  3-ZONE AUTOMATIC IRRIGATION SYSTEM
+#  ESPHome Configuration — Rev 4.1
+# ============================================================
+#  Hardware:
+#    Controller  : ESP32 DevKit V1 30-pin (WROOM-32)
+#    Terminal    : ESP32 30-pin terminal adapter board
+#    Display     : 0.96" SSD1306 I2C OLED 128x64 (enclosure lid)
+#    Nextion     : NX4832F035 3.5" HMI (remote display box)
+#    Pump        : 12V DC diaphragm pump (GPIO 15)
+#    Solenoids   : 12V DC NC brass valves (GPIO 26/27/14)
+#    Relay board : Keenso 4-ch 5V optoisolated (SRD-05VDC-SL-C)
+#  Moisture      : Zigbee sensors via Z2M → HA
+#
+#  NETWORK:
+#    Static IP   : 192.168.1.121
+#
+#  GPIO ASSIGNMENTS:
+#    GPIO 4  : Nextion TX (UART)
+#    GPIO 5  : Nextion RX (UART)
+#    GPIO 14 : Zone 3 relay output
+#    GPIO 15 : Pump relay output
+#    GPIO 21 : OLED SDA (I2C)
+#    GPIO 22 : OLED SCL (I2C)
+#    GPIO 26 : Zone 1 relay output
+#    GPIO 27 : Zone 2 relay output
+#
+#  CHANGE LOG:
+#    Rev 1.0 — Initial release
+#    Rev 2.0 — Added OLED display
+#    Rev 3.0 — Zigbee moisture sensors via HA
+#    Rev 4.0 — Added Nextion 3.5" HMI remote display
+#    Rev 4.1 — Fixed Nextion pins GPIO4/5, IP 192.168.1.121
+#              Relay board changed to Keenso 5V (inverted: false)
+# ============================================================
+
+esphome:
+  name: irrigation-controller
+  friendly_name: Garden Irrigation Controller
+  comment: "3-zone irrigation — back garden + 2x front garden"
+  on_boot:
+    priority: -100
+    then:
+      - switch.turn_off: zone1_valve
+      - switch.turn_off: zone2_valve
+      - switch.turn_off: zone3_valve
+      - switch.turn_off: pump_relay
+      - logger.log: "Irrigation controller booted — all valves closed"
+      - component.update: oled_display
+      - delay: 3s
+      - lambda: |-
+          id(nextion_display).send_command("page 0");
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: INFO
+
+api:
+  services:
+    - service: start_zone
+      variables:
+        zone: int
+        duration_minutes: int
+      then:
+        - script.execute:
+            id: run_zone
+            zone: !lambda "return zone;"
+            duration_minutes: !lambda "return duration_minutes;"
+    - service: stop_all
+      then:
+        - script.execute: emergency_stop
+    - service: moisture_trigger
+      variables:
+        zone: int
+      then:
+        - if:
+            condition:
+              lambda: "return id(active_zone) == 0;"
+            then:
+              - script.execute:
+                  id: run_zone
+                  zone: !lambda "return zone;"
+                  duration_minutes: 8
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.121
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  ap:
+    ssid: "Irrigation Fallback"
+    password: !secret ap_fallback_password
+
+captive_portal:
+
+web_server:
+  port: 80
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  id: bus_a
+
+uart:
+  id: uart_nextion
+  tx_pin: GPIO4
+  rx_pin: GPIO5
+  baud_rate: 9600
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 10
+  - file: "gfonts://Roboto"
+    id: font_medium
+    size: 12
+
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    address: 0x3C
+    id: oled_display
+    update_interval: 5s
+    lambda: |-
+      if (id(active_zone) != 0) {
+        it.fill(COLOR_OFF);
+        it.printf(64, 2, id(font_small), COLOR_ON, TextAlign::TOP_CENTER, "WATERING ACTIVE");
+        it.printf(64, 18, id(font_medium), COLOR_ON, TextAlign::TOP_CENTER, "%s", id(active_zone_name).state.c_str());
+        it.printf(0, 34, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Pump: %s", id(pump_relay).state ? "ON" : "OFF");
+      } else {
+        it.fill(COLOR_OFF);
+        it.printf(0, 4, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z1");
+        float z1 = id(ha_moisture_z1).state;
+        if (!isnan(z1)) {
+          it.rectangle(18, 5, 90, 9);
+          it.filled_rectangle(18, 5, (int)(z1 * 0.9), 9);
+          it.printf(112, 4, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "%.0f%%", z1);
+        } else {
+          it.printf(18, 4, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "No sensor");
+        }
+        it.printf(0, 18, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z2");
+        float z2 = id(ha_moisture_z2).state;
+        if (!isnan(z2)) {
+          it.rectangle(18, 19, 90, 9);
+          it.filled_rectangle(18, 19, (int)(z2 * 0.9), 9);
+          it.printf(112, 18, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "%.0f%%", z2);
+        } else {
+          it.printf(18, 18, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "No sensor");
+        }
+        it.printf(0, 32, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Z3");
+        it.printf(18, 32, id(font_small), COLOR_ON, TextAlign::TOP_LEFT, "Schedule only");
+        it.line(0, 44, 128, 44);
+        it.printf(64, 46, id(font_small), COLOR_ON, TextAlign::TOP_CENTER, "HA Connected");
+      }
+
+  - platform: nextion
+    id: nextion_display
+    uart_id: uart_nextion
+    update_interval: 5s
+    lambda: |-
+      float z1 = id(ha_moisture_z1).state;
+      float z2 = id(ha_moisture_z2).state;
+      it.set_component_text("p0.t0", id(active_zone_name).state.c_str());
+      it.set_component_text("p0.t1", id(pump_relay).state ? "RUNNING" : "STANDBY");
+      it.set_component_text("p0.t2", id(active_zone) != 0 ? "WATERING ACTIVE" : "SYSTEM READY");
+      char wifi_buf[16];
+      sprintf(wifi_buf, "%d dBm", (int)id(wifi_signal_sensor).state);
+      it.set_component_text("p0.t3", wifi_buf);
+      if (!isnan(z1)) {
+        char z1_buf[8];
+        sprintf(z1_buf, "%.0f%%", z1);
+        it.set_component_text("p1.t0", z1_buf);
+        it.set_component_value("p1.j0", (int)z1);
+        it.set_component_text("p1.t2", z1 < 30 ? "DRY" : z1 < 60 ? "OK" : "WET");
+      } else {
+        it.set_component_text("p1.t0", "N/A");
+        it.set_component_text("p1.t2", "NO SENSOR");
+      }
+      if (!isnan(z2)) {
+        char z2_buf[8];
+        sprintf(z2_buf, "%.0f%%", z2);
+        it.set_component_text("p1.t1", z2_buf);
+        it.set_component_value("p1.j1", (int)z2);
+        it.set_component_text("p1.t3", z2 < 30 ? "DRY" : z2 < 60 ? "OK" : "WET");
+      } else {
+        it.set_component_text("p1.t1", "N/A");
+        it.set_component_text("p1.t3", "NO SENSOR");
+      }
+      char thresh1[8], thresh2[8], dur1[8], dur2[8], dur3[8];
+      sprintf(thresh1, "%.0f%%", id(ha_threshold_z1).state);
+      sprintf(thresh2, "%.0f%%", id(ha_threshold_z2).state);
+      sprintf(dur1, "%.0fmin", id(ha_duration_z1).state);
+      sprintf(dur2, "%.0fmin", id(ha_duration_z2).state);
+      sprintf(dur3, "%.0fmin", id(ha_duration_z3).state);
+      it.set_component_text("p2.t0", thresh1);
+      it.set_component_text("p2.t1", thresh2);
+      it.set_component_text("p2.t2", dur1);
+      it.set_component_text("p2.t3", dur2);
+      it.set_component_text("p2.t4", dur3);
+
+sensor:
+  - platform: homeassistant
+    id: ha_moisture_z1
+    entity_id: sensor.garden_moisture_sensor_back_soil_moisture
+    name: "Z1 Moisture (from HA)"
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+    on_value:
+      then:
+        - component.update: oled_display
+        - component.update: nextion_display
+
+  - platform: homeassistant
+    id: ha_moisture_z2
+    entity_id: sensor.garden_moisture_sensor_front_soil_moisture
+    name: "Z2 Moisture (from HA)"
+    unit_of_measurement: "%"
+    icon: mdi:water-percent
+    on_value:
+      then:
+        - component.update: oled_display
+        - component.update: nextion_display
+
+  - platform: homeassistant
+    id: ha_threshold_z1
+    entity_id: input_number.moisture_threshold_z1
+    internal: true
+
+  - platform: homeassistant
+    id: ha_threshold_z2
+    entity_id: input_number.moisture_threshold_z2
+    internal: true
+
+  - platform: homeassistant
+    id: ha_duration_z1
+    entity_id: input_number.zone_1_duration
+    internal: true
+
+  - platform: homeassistant
+    id: ha_duration_z2
+    entity_id: input_number.zone_2_duration
+    internal: true
+
+  - platform: homeassistant
+    id: ha_duration_z3
+    entity_id: input_number.zone_3_duration
+    internal: true
+
+  - platform: wifi_signal
+    id: wifi_signal_sensor
+    name: "Irrigation Controller WiFi"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Irrigation Controller Uptime"
+    update_interval: 60s
+
+time:
+  - platform: homeassistant
+    id: ha_time
+  - platform: sntp
+    id: sntp_time
+
+globals:
+  - id: active_zone
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+output:
+  - platform: gpio
+    id: relay_zone1
+    pin:
+      number: GPIO26
+      inverted: false
+  - platform: gpio
+    id: relay_zone2
+    pin:
+      number: GPIO27
+      inverted: false
+  - platform: gpio
+    id: relay_zone3
+    pin:
+      number: GPIO14
+      inverted: false
+  - platform: gpio
+    id: relay_pump
+    pin:
+      number: GPIO15
+      inverted: false
+
+switch:
+  - platform: output
+    id: zone1_valve
+    name: "Zone 1 Valve (Back Garden)"
+    output: relay_zone1
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 1 valve OPEN"
+        - component.update: oled_display
+        - lambda: id(nextion_display).send_command("page 0");
+    on_turn_off:
+      then:
+        - logger.log: "Zone 1 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: zone2_valve
+    name: "Zone 2 Valve (Front Garden A)"
+    output: relay_zone2
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 2 valve OPEN"
+        - component.update: oled_display
+        - lambda: id(nextion_display).send_command("page 0");
+    on_turn_off:
+      then:
+        - logger.log: "Zone 2 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: zone3_valve
+    name: "Zone 3 Valve (Front Garden B)"
+    output: relay_zone3
+    restore_mode: ALWAYS_OFF
+    icon: mdi:valve
+    on_turn_on:
+      then:
+        - logger.log: "Zone 3 valve OPEN"
+        - component.update: oled_display
+        - lambda: id(nextion_display).send_command("page 0");
+    on_turn_off:
+      then:
+        - logger.log: "Zone 3 valve CLOSED"
+        - component.update: oled_display
+
+  - platform: output
+    id: pump_relay
+    name: "Irrigation Pump"
+    output: relay_pump
+    restore_mode: ALWAYS_OFF
+    icon: mdi:pump
+    on_turn_on:
+      then:
+        - component.update: oled_display
+        - component.update: nextion_display
+    on_turn_off:
+      then:
+        - component.update: oled_display
+        - component.update: nextion_display
+
+binary_sensor:
+  - platform: template
+    id: irrigation_active
+    name: "Irrigation Active"
+    icon: mdi:sprinkler
+    lambda: |-
+      return id(active_zone) != 0;
+  - platform: status
+    name: "Irrigation Controller Status"
+    id: wifi_connected
+
+text_sensor:
+  - platform: template
+    id: active_zone_name
+    name: "Active Zone"
+    icon: mdi:map-marker
+    lambda: |-
+      switch(id(active_zone)) {
+        case 1: return {"Zone 1 Back Garden"};
+        case 2: return {"Zone 2 Front A"};
+        case 3: return {"Zone 3 Front B"};
+        default: return {"Idle"};
+      }
+    update_interval: 5s
+  - platform: wifi_info
+    ip_address:
+      name: "Irrigation IP Address"
+
+script:
+  - id: run_zone
+    mode: single
+    parameters:
+      zone: int
+      duration_minutes: int
+    then:
+      - if:
+          condition:
+            lambda: "return id(active_zone) != 0;"
+          then:
+            - logger.log:
+                format: "Zone %d requested but zone %d already active"
+                args: ["zone", "id(active_zone)"]
+          else:
+            - globals.set:
+                id: active_zone
+                value: !lambda "return zone;"
+            - component.update: oled_display
+            - lambda: id(nextion_display).send_command("page 0");
+            - switch.turn_on: pump_relay
+            - delay: 2000ms
+            - if:
+                condition:
+                  lambda: "return zone == 1;"
+                then:
+                  - switch.turn_on: zone1_valve
+            - if:
+                condition:
+                  lambda: "return zone == 2;"
+                then:
+                  - switch.turn_on: zone2_valve
+            - if:
+                condition:
+                  lambda: "return zone == 3;"
+                then:
+                  - switch.turn_on: zone3_valve
+            - delay: !lambda "return duration_minutes * 60000;"
+            - script.execute:
+                id: close_zone
+                zone: !lambda "return zone;"
+
+  - id: close_zone
+    parameters:
+      zone: int
+    then:
+      - if:
+          condition:
+            lambda: "return zone == 1;"
+          then:
+            - switch.turn_off: zone1_valve
+      - if:
+          condition:
+            lambda: "return zone == 2;"
+          then:
+            - switch.turn_off: zone2_valve
+      - if:
+          condition:
+            lambda: "return zone == 3;"
+          then:
+            - switch.turn_off: zone3_valve
+      - delay: 3000ms
+      - switch.turn_off: pump_relay
+      - globals.set:
+          id: active_zone
+          value: "0"
+      - component.update: oled_display
+      - component.update: nextion_display
+      - logger.log:
+          format: "Zone %d complete — pump off"
+          args: ["zone"]
+
+  - id: emergency_stop
+    mode: restart
+    then:
+      - switch.turn_off: zone1_valve
+      - switch.turn_off: zone2_valve
+      - switch.turn_off: zone3_valve
+      - delay: 500ms
+      - switch.turn_off: pump_relay
+      - globals.set:
+          id: active_zone
+          value: "0"
+      - component.update: oled_display
+      - component.update: nextion_display
+      - logger.log: "EMERGENCY STOP — all zones closed"
+      - homeassistant.event:
+          event: esphome.irrigation_emergency_stop
+          data: {}
+
+button:
+  - platform: restart
+    name: "Restart Irrigation Controller"
+    icon: mdi:restart
+  - platform: template
+    name: "Emergency Stop"
+    icon: mdi:stop-circle
+    on_press:
+      then:
+        - script.execute: emergency_stop
