@@ -74,6 +74,7 @@ The NX4832F035 3.5" touchscreen is mounted in a remote IP67 display box connecte
 
 **3 pages:**
 - **Page 0 — Status:** Active zone, pump state, system status, WiFi signal
+- https://github.com/Siweaver1971/irrigation-system/blob/main/images/display/Screenshot%202026-05-08%20065341.png
 - **Page 1 — Moisture:** Zone 1 & 2 soil moisture % with live progress bars
 - **Page 2 — Settings:** Enable/disable zones, adjust thresholds and durations
 
