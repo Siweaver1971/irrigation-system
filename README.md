@@ -14,7 +14,7 @@ A fully automated DIY garden irrigation system built with ESPHome, Home Assistan
 |-----------|--------------|
 | Controller | ESP32 DevKit V1 30-pin (ESPHome) |
 | Pump | 12V DC self-priming diaphragm pump |
-| Valves | 12V DC NC brass solenoid valves × 3 (3/4" BSP) |
+| Valves | 12V DC NC brass solenoid valves × 3 (3/4" BSP) | https://github.com/Siweaver1971/irrigation-system/blob/main/images/plumbing/Screenshot%202026-05-10%20075257.png
 | Moisture sensors | Zigbee via Zigbee2MQTT → Home Assistant (Zones 1 & 2) |
 | PSU | Mean Well LRS-150-12 (12V 12.5A) |
 | Relay board | Keenso 4-channel 5V optoisolated (SRD-05VDC-SL-C) |
