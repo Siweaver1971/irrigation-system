@@ -1,0 +1,117 @@
+# ============================================================
+# ESPHome — Nextion Animation Controller
+# Cycles picture frames for pump, water drop, and valve flow
+# Add this block to your existing irrigation-controller YAML
+# ============================================================
+
+# Global frame counters
+globals:
+  - id: pump_frame
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: drop_frame
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: valve_frame
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+# ── Interval: run animations at 10fps (100ms) ───────────────
+interval:
+  - interval: 100ms
+    then:
+      - lambda: |-
+          // ── Pump animation (only when pump is running) ──
+          if (id(pump_relay).state) {
+            id(pump_frame) = (id(pump_frame) + 1) % 6;
+            // Picture indices 9-14 = pump_anim_0 through pump_anim_5
+            auto call = id(nextion_display).set_component_picture("p1.p_pump", 9 + id(pump_frame));
+            // Also update Home page pump icon
+            id(nextion_display).set_component_picture("p0.p_pump_home", 9 + id(pump_frame));
+          }
+          
+          // ── Water drop pulse (only when any zone is active) ──
+          bool any_active = id(valve_z1).state || id(valve_z2).state || id(valve_z3).state;
+          if (any_active) {
+            id(drop_frame) = (id(drop_frame) + 1) % 3;
+            // Picture indices: water_drop_anim_0=34, 1=35, 2=36
+            int drop_pic = 34 + id(drop_frame);
+            id(nextion_display).set_component_picture("p0.p_drop", drop_pic);
+          } else {
+            // Static empty drop when idle
+            id(nextion_display).set_component_picture("p0.p_drop", 17);  // water_drop_empty
+          }
+          
+          // ── Valve flow lines (cycle per active valve) ──
+          if (id(valve_z1).state) {
+            id(valve_frame) = (id(valve_frame) + 1) % 3;
+            id(nextion_display).set_component_picture("p1.p_valve1", 37 + id(valve_frame));
+          }
+          if (id(valve_z2).state) {
+            id(nextion_display).set_component_picture("p1.p_valve2", 37 + id(valve_frame));
+          }
+          if (id(valve_z3).state) {
+            id(nextion_display).set_component_picture("p1.p_valve3", 37 + id(valve_frame));
+          }
+
+# ── 1-Second interval: clock + status updates ───────────────
+  - interval: 1s
+    then:
+      - lambda: |-
+          auto now = id(ha_time).now();
+          if (now.is_valid()) {
+            char time_buf[9];
+            sprintf(time_buf, "%02d:%02d:%02d", now.hour, now.minute, now.second);
+            id(nextion_display).set_component_text("p0.t_time", time_buf);
+            
+            char date_buf[18];
+            const char* days[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+            const char* months[] = {"","Jan","Feb","Mar","Apr","May","Jun",
+                                    "Jul","Aug","Sep","Oct","Nov","Dec"};
+            sprintf(date_buf, "%s %02d %s %04d", 
+                    days[now.day_of_week], now.day_of_month, 
+                    months[now.month], now.year);
+            id(nextion_display).set_component_text("p0.t_date", date_buf);
+          }
+          
+          int z1_pct = (int)id(z1_moisture).state;
+          int z2_pct = (int)id(z2_moisture).state;
+          char buf[8];
+          
+          sprintf(buf, "%d%%", z1_pct);
+          id(nextion_display).set_component_text("p2.t_z1_pct", buf);
+          id(nextion_display).set_component_value("p2.j0", z1_pct);
+          
+          sprintf(buf, "%d%%", z2_pct);
+          id(nextion_display).set_component_text("p2.t_z2_pct", buf);
+          id(nextion_display).set_component_value("p2.j1", z2_pct);
+          
+          auto moisture_label = [](int pct) -> const char* {
+            if (pct < 25) return "DRY";
+            if (pct < 55) return "OK";
+            if (pct < 80) return "WET";
+            return "SATURATED";
+          };
+          id(nextion_display).set_component_text("p2.t_z1_status", moisture_label(z1_pct));
+          id(nextion_display).set_component_text("p2.t_z2_status", moisture_label(z2_pct));
+
+# ── Picture import order (maintain exactly in Nextion Editor) ─
+#  0  nav_home.png            6  valve_open.png
+#  1  nav_zones.png           7  valve_closed.png
+#  2  nav_moisture.png        8  valve_disabled.png
+#  3  nav_butt.png            9  pump_anim_0.png  ← anim start
+#  4  nav_settings.png       14  pump_anim_5.png  ← anim end
+#  5  nav_diag.png           15  pump_stopped.png
+#                            16  pump_running.png (static)
+#                            17  water_drop_empty.png
+#                            18-22  weather_*.png
+#                            23-26  battery_*.png
+#                            27  tick.png
+#                            28  cross.png
+#                            29  warning.png
+#                            30-33  wifi_*.png
+#                            34-36  water_drop_anim_*.png
+#                            37-39  valve_flow_anim_*.png
